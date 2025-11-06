@@ -23,8 +23,15 @@ export class NotificationsService {
       throw new InternalServerErrorException("Missing event payload");
     }
 
-    const { tracking_number, parcel_status, amount, sender, receiver } =
-      event.payload;
+    const {
+      tracking_number,
+      parcel_status,
+      amount,
+      origin_center,
+      destination_center,
+      sender,
+      receiver,
+    } = event.payload;
 
     let parcelId: string;
 
@@ -32,21 +39,24 @@ export class NotificationsService {
     try {
       const res = await pool.query(
         `INSERT INTO parcels (
-          tracking_number, sender_name, sender_phone, sender_email,
-          receiver_name, receiver_phone, receiver_email, amount, current_status
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        ON CONFLICT (tracking_number) 
-        DO UPDATE SET
-          sender_name = EXCLUDED.sender_name,
-          sender_phone = EXCLUDED.sender_phone,
-          sender_email = EXCLUDED.sender_email,
-          receiver_name = EXCLUDED.receiver_name,
-          receiver_phone = EXCLUDED.receiver_phone,
-          receiver_email = EXCLUDED.receiver_email,
-          amount = EXCLUDED.amount,
-          current_status = EXCLUDED.current_status,
-          updated_at = now()
-        RETURNING id, current_status`,
+        tracking_number, sender_name, sender_phone, sender_email,
+        receiver_name, receiver_phone, receiver_email, amount, current_status,
+        origin_center, destination_center
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      ON CONFLICT (tracking_number) 
+      DO UPDATE SET
+        sender_name = EXCLUDED.sender_name,
+        sender_phone = EXCLUDED.sender_phone,
+        sender_email = EXCLUDED.sender_email,
+        receiver_name = EXCLUDED.receiver_name,
+        receiver_phone = EXCLUDED.receiver_phone,
+        receiver_email = EXCLUDED.receiver_email,
+        amount = EXCLUDED.amount,
+        current_status = EXCLUDED.current_status,
+        origin_center = EXCLUDED.origin_center,
+        destination_center = EXCLUDED.destination_center,
+        updated_at = now()
+      RETURNING id, current_status`,
         [
           tracking_number,
           sender.name,
@@ -57,6 +67,8 @@ export class NotificationsService {
           receiver.email,
           amount ?? null,
           parcel_status,
+          origin_center,
+          destination_center,
         ]
       );
       parcelId = res.rows[0].id;
@@ -91,7 +103,7 @@ export class NotificationsService {
     try {
       await pool.query(
         `INSERT INTO parcel_history (parcel_id, old_status, new_status, changed_by)
-         VALUES ($1, $2, $3, $4)`,
+       VALUES ($1, $2, $3, $4)`,
         [parcelId, null, parcel_status, "system"]
       );
     } catch (err: unknown) {
@@ -115,15 +127,28 @@ export class NotificationsService {
         if (!destination) continue;
 
         try {
-          const destHash = hashDestination(destination);
           const encrypted = encryptDestination(destination);
+
+          // ✅ Determine post_office_center based on role + status
+          let postOfficeCenter: string | null = null;
+          if (
+            (r.role === "sender" && parcel_status === "pending") ||
+            (r.role === "receiver" && parcel_status === "dispatched") ||
+            (r.role === "receiver" && parcel_status === "arrived") ||
+            (r.role === "sender" && parcel_status === "arrived")
+          ) {
+            postOfficeCenter =
+              parcel_status === "pending"
+                ? origin_center ?? null
+                : destination_center ?? null;
+          }
 
           const notifRes = await pool.query(
             `INSERT INTO notifications (
-              parcel_id, channel, recipient_role, recipient_name, recipient_destination,
-              template_vars, status, attempts
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-            RETURNING *`,
+            parcel_id, channel, recipient_role, recipient_name, recipient_destination,
+            template_vars, status, attempts, post_office_center
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          RETURNING *`,
             [
               parcelId,
               ch,
@@ -138,6 +163,7 @@ export class NotificationsService {
               }),
               "queued",
               0,
+              postOfficeCenter,
             ]
           );
 

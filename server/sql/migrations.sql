@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS parcels (
     receiver_phone text,
     receiver_email text,
     amount numeric,
-    current_status text NOT NULL DEFAULT 'queued', -- queued, dispatched, arrived, received
+    origin_center text,
+    destination_center text,
+    current_status text NOT NULL DEFAULT 'pending', -- pending, dispatched, arrived, received
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );

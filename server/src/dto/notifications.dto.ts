@@ -59,6 +59,14 @@ export class NotificationEventDto {
   @Min(0)
   amount?: number;
 
+  @IsOptional()
+  @IsString()
+  origin_center?: string;
+
+  @IsOptional()
+  @IsString()
+  destination_center?: string;
+
   @ValidateNested()
   @Type(() => RecipientDto)
   sender!: RecipientDto;

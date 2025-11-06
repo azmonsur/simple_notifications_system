@@ -1,4 +1,3 @@
-// src/workers/whatsapp/whatsapp.worker.ts
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
 import { logger } from "../../utils/logger";
@@ -52,6 +51,8 @@ type ConfirmChannel = {
 @Injectable()
 export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly queueName = "notifications.whatsapp";
+  private readonly prefetchCount = 5; // 👈 limits concurrent messages (bottleneck)
+  private readonly channelRetryBackoff = [30, 120, 360]; // 👈 minutes (30 min, 2 h, 6 h)
   private readonly maxRetries = 3;
   private channel: ConfirmChannel | null = null;
 
@@ -64,7 +65,7 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.channel = ch as unknown as ConfirmChannel;
-    this.channel.prefetch(5);
+    this.channel.prefetch(this.prefetchCount);
 
     await this.channel.consume(this.queueName, this.handleMessage.bind(this), {
       noAck: false,
@@ -128,35 +129,23 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
       job = JSON.parse(msg.content.toString());
     } catch (err) {
       logger.error("❌ Failed to parse WhatsApp job:", err);
-      this.channel.nack(msg, false, false); // DLQ
+      this.channel.nack(msg, false, false);
       return;
     }
 
     const attempts = job.attempts ?? 0;
     const nextAttempts = attempts + 1;
 
-    // Validate recipient
     if (!job.recipient?.destination) {
-      logger.warn(
-        JSON.stringify({ notif_id: job.notif_id, reason: "Missing recipient" })
-      );
-      await pool.query(
-        "UPDATE notifications SET status=$1, last_error=$2, updated_at=now() WHERE id=$3",
-        ["failed", "Missing recipient", job.notif_id]
-      );
+      await this.markFailed(job.notif_id, "Missing recipient");
       this.channel.ack(msg);
       return;
     }
 
-    // Prepare message
     const phone = job.recipient.destination;
     const useTemplate = process.env.WHATSAPP_USE_TEMPLATE === "true";
 
-    const messageOptions: {
-      body?: string;
-      templateName?: string;
-      templateParams?: Record<string, string>;
-    } = useTemplate
+    const messageOptions: any = useTemplate
       ? {
           templateName: this.getTemplateName(job),
           templateParams: this.getTemplateParams(job),
@@ -164,12 +153,10 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
       : { body: this.formatPlainMessage(job) };
 
     let response: any = null;
-
     try {
       response = await SendWhatsAppCloud({ to: phone, ...messageOptions });
 
       if (response?.success) {
-        // WhatsApp Sent successfully
         await pool.query(
           "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
           ["sent", nextAttempts, null, job.notif_id]
@@ -179,59 +166,68 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
             notif_id: job.notif_id,
             to: phone,
             status: "sent",
-            response,
           })
         );
         this.channel.ack(msg);
         return;
-      } else {
-        // WhatsApp Not successful
-        await pool.query(
-          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["queue", nextAttempts, JSON.stringify(response), job.notif_id]
-        );
-        logger.warn(
-          JSON.stringify({
-            notif_id: job.notif_id,
-            to: phone,
-            reason: "Non-success response",
-            response,
-          })
-        );
       }
-    } catch (err) {}
+
+      await this.markRetry(job, nextAttempts, response, "Non-success response");
+    } catch (err: any) {
+      await this.markRetry(job, nextAttempts, err, "WhatsApp API error");
+    }
 
     // Retry handling
     if (nextAttempts > this.maxRetries) {
-      await pool.query(
-        "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-        ["failed", nextAttempts, JSON.stringify(response), job.notif_id]
-      );
-      logger.error(
-        JSON.stringify({
-          notif_id: job.notif_id,
-          reason: "Max retries reached",
-          response,
-        })
-      );
-      this.channel.nack(msg, false, false); // DLQ
+      await this.markFailed(job.notif_id, "Max retries reached");
+      this.channel.nack(msg, false, false); // Send to DLQ
       return;
     }
 
-    // Schedule retry with exponential backoff (6-hour multiplier like SMS)
+    const backoffMinutes =
+      this.channelRetryBackoff[nextAttempts - 1] ||
+      this.channelRetryBackoff[this.channelRetryBackoff.length - 1];
+    const retryDelayMs = backoffMinutes * 60 * 1000;
+
     job.attempts = nextAttempts;
-    const retryDelayMs = Math.pow(2, nextAttempts) * 60 * 60 * 6 * 1000;
-
     await publishDeliveryDelayed(job, retryDelayMs);
-    this.channel.ack(msg);
 
+    this.channel.ack(msg);
     logger.warn(
       JSON.stringify({
         notif_id: job.notif_id,
-        reason: "Retrying WhatsApp message",
         attempts: nextAttempts,
         retryDelayMs,
+        reason: "Scheduled WhatsApp retry",
       })
     );
+  }
+
+  private async markRetry(
+    job: WhatsAppJob,
+    attempts: number,
+    error: any,
+    reason: string
+  ) {
+    await pool.query(
+      "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
+      ["queue", attempts, JSON.stringify(error), job.notif_id]
+    );
+    logger.warn(
+      JSON.stringify({
+        notif_id: job.notif_id,
+        to: job.recipient?.destination,
+        reason,
+        attempts,
+      })
+    );
+  }
+
+  private async markFailed(notif_id: string, reason: string) {
+    await pool.query(
+      "UPDATE notifications SET status=$1, last_error=$2, updated_at=now() WHERE id=$3",
+      ["failed", reason, notif_id]
+    );
+    logger.error(JSON.stringify({ notif_id, reason }));
   }
 }
