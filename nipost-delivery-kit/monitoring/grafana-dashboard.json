@@ -1,0 +1,58 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Notification Platform - Overview",
+    "panels": [
+      {
+        "type": "graph",
+        "title": "Notifications Sent vs Failed",
+        "targets": [
+          {
+            "expr": "notifications_sent_total",
+            "legendFormat": "sent"
+          },
+          {
+            "expr": "notifications_failed_total",
+            "legendFormat": "failed"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "type": "graph",
+        "title": "RabbitMQ Queue Depth",
+        "targets": [
+          {
+            "expr": "rabbitmq_queue_messages{queue='notifications.delivery'}"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "type": "stat",
+        "title": "DLQ Messages",
+        "targets": [
+          {
+            "expr": "rabbitmq_queue_messages{queue='notifications.dlq'}"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 8
+        }
+      }
+    ]
+  }
+}

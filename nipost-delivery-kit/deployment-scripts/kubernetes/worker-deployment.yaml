@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker
+  namespace: notification-platform
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: notification-worker
+  template:
+    metadata:
+      labels:
+        app: notification-worker
+    spec:
+      containers:
+        - name: worker
+          image: your-registry/notification-worker:latest
+          envFrom:
+            - secretRef:
+                name: notif-secrets
+          resources:
+            limits:
+              cpu: '1'
+              memory: '1024Mi'

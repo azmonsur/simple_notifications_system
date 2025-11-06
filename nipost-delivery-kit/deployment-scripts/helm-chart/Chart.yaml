@@ -1,0 +1,4 @@
+apiVersion: v2
+name: notification-platform
+description: Helm chart for Notification Platform
+version: 0.1.0
