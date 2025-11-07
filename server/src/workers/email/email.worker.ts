@@ -1,9 +1,10 @@
-// src/workers/email-worker.service.ts
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
 import { logger } from "../../utils/logger";
 import SendEmailPostmark from "../../helpers/sendEmailPostmark";
 import SendEmailMailerSend from "../../helpers/sendEmailMailersend";
+import SendEmailSendGrid from "../../helpers/sendEmailSendgrid";
+import { toTitleCase } from "../../helpers/convertToTitleCase";
 import Bottleneck from "bottleneck";
 import { Pool } from "pg";
 
@@ -29,8 +30,8 @@ interface EmailJob {
   notif_id: string;
   recipient: Recipient;
   template_vars: TemplateVars;
+  post_office_center: string;
   attempts?: number;
-  // any other fields you publish
 }
 
 type ConsumeMessage = {
@@ -57,14 +58,13 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly maxRetries = 3;
   private channel: ConfirmChannel | null = null;
 
-  // Production-grade limiter (adjust concurrency/minTime as required)
   private readonly limiter = new Bottleneck({
-    minTime: 50, // 20 req/sec approx
-    maxConcurrent: 5,
+    minTime: 100,
+    maxConcurrent: 3,
   });
 
   async onModuleInit() {
-    logger.info("🚀 Starting Email Worker (production mode)...");
+    logger.info("🚀 Starting Email Worker...");
 
     const ch = await getChannel();
     if (!ch) {
@@ -73,21 +73,16 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.channel = ch as unknown as ConfirmChannel;
+    this.channel.prefetch(5);
 
-    // Prefetch should be slightly higher than concurrency to keep pipeline full
-    this.channel.prefetch(10);
-
-    // Consume messages and hand off to limiter which calls processMessage
     await this.channel.consume(
       this.queueName,
-      (msg) => {
+      (msg: ConsumeMessage | null) => {
         if (!msg) return;
-        // schedule processing - returns a promise; handle rejections to avoid unhandled rejections
         this.limiter
           .schedule(() => this.processMessage(msg))
           .catch((err) => {
-            // If processMessage throws unexpectedly make sure we don't leave the message unacked.
-            logger.error("❌ Unhandled error in processMessage", err);
+            logger.error("❌ Unhandled error:", err);
             this.safeNack(msg, false, true);
           });
       },
@@ -98,59 +93,61 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    if (this.channel?.close) {
-      try {
-        await this.channel.close();
-      } catch (err) {
-        logger.warn("⚠️ Error closing RabbitMQ channel", err);
-      }
-    }
-    logger.info("🧹 Email worker stopped and channel closed.");
+    if (this.channel?.close) await this.channel.close();
     await pool.end().catch(() => {});
+    logger.info("🧹 Email worker stopped.");
   }
 
-  // format email content
   private formatEmail(job: EmailJob) {
-    const { recipient, template_vars } = job;
+    const { recipient, template_vars, post_office_center } = job;
     const role = recipient.role;
     const status = (template_vars.status || "pending").toLowerCase();
     const trackingNumber = template_vars.tracking_number || "N/A";
     const amount = template_vars.amount ?? 0;
     const customerName = recipient.name || "Customer";
 
+    const postOfficeCenter = post_office_center ? post_office_center : "";
+
     const formattedAmount = new Intl.NumberFormat("en-NG", {
       style: "currency",
       currency: "NGN",
     }).format(amount);
 
+    const subject = `Parcel Update: ${trackingNumber.toUpperCase()} - ${toTitleCase(
+      status
+    )}`;
+
     let textBody = "";
     let htmlBody = "";
 
     switch (true) {
-      case role === "sender" && status === "queued":
-        textBody = `Hi ${customerName}, Thank you for your shipment. Order ${trackingNumber} estimated charges: ${formattedAmount}.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Thank you for your shipment. Order <strong>${trackingNumber}</strong> estimated charges: <strong>${formattedAmount}</strong>.</p>`;
+      case role === "sender" && status === "pending":
+        textBody = `Hi ${customerName}, Thank you for your shipment at ${postOfficeCenter}. Order ${trackingNumber} estimated charges: ${formattedAmount}.`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Thank you for your shipment at ${postOfficeCenter}. Order <strong>${trackingNumber}</strong> estimated charges: <strong>${formattedAmount}</strong>.</p>`;
         break;
-      case role === "receiver" && status === "queued":
-        textBody = `Hi ${customerName}, A shipment has been sent for you. Order Id: ${trackingNumber}.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>A shipment has been sent for you. Order Id: <strong>${trackingNumber}</strong>.</p>`;
+      case role === "receiver" && status === "pending":
+        textBody = `Hi ${customerName}, A shipment with tracking ID (${trackingNumber}) has been taken for you at ${postOfficeCenter}.`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>A shipment with tracking ID (<strong>${trackingNumber}</strong>) has been taken for you.</p>`;
         break;
-      case (role === "sender" || role === "receiver") &&
-        status === "dispatched":
-        textBody = `Hi ${customerName}, your shipment ${trackingNumber} is dispatched.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment <strong>${trackingNumber}</strong> is dispatched.</p>`;
+      case role === "sender" && status === "dispatched":
+        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has been dispatched to ${postOfficeCenter}.`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has been dispatched.</p>`;
         break;
-      case (role === "sender" || role === "receiver") && status === "arrived":
-        textBody = `Hi ${customerName}, your shipment ${trackingNumber} is ready for collection.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment <strong>${trackingNumber}</strong> is ready for collection.</p>`;
+      case role === "receiver" && status === "dispatched":
+        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has been dispatched to ${postOfficeCenter}.`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has been dispatched to ${postOfficeCenter}.</p>`;
+        break;
+      case (role === "receiver" || role === "sender") && status === "arrived":
+        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) is ready for collection at ${postOfficeCenter}.`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) is ready for collection at ${postOfficeCenter}.</p>`;
         break;
       case role === "sender" && status === "received":
-        textBody = `Hi ${customerName}, your shipment ${trackingNumber} has been received.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment <strong>${trackingNumber}</strong> has been received.</p>`;
+        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has been collected.`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has been collected.</p>`;
         break;
       case role === "receiver" && status === "received":
-        textBody = `Hi ${customerName}, you have received shipment ${trackingNumber}.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>You have received shipment <strong>${trackingNumber}</strong>.</p>`;
+        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has been collected by you.`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has been collected by you.</p>`;
         break;
       default:
         textBody = `Hi ${customerName}, your package ${trackingNumber} has a status update: ${status}.`;
@@ -158,107 +155,21 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
         break;
     }
 
-    const subject = `Parcel Update: ${trackingNumber} - ${status}`;
     return { subject, textBody, htmlBody };
   }
 
-  // safe ack/nack helpers
-  private safeAck(msg: ConsumeMessage) {
-    try {
-      this.channel?.ack(msg);
-    } catch (err) {
-      logger.error("❌ safeAck failed", err);
-    }
-  }
-
-  private safeNack(msg: ConsumeMessage, allUpTo = false, requeue = false) {
-    try {
-      this.channel?.nack(msg, allUpTo, requeue);
-    } catch (err) {
-      logger.error("❌ safeNack failed", err);
-    }
-  }
-
-  // Wrap provider call with timeout to avoid hanging indefinitely
-  private async sendWithTimeout(opts: {
-    to: string;
-    subject: string;
-    body: string;
-    htmlBody?: string;
-    timeoutMs?: number;
-  }) {
-    const { to, subject, body, htmlBody, timeoutMs = 30000 } = opts;
-
-    // You can choose provider selection logic here. Example: prefer MailerSend, fallback Postmark
-    const call = async () => {
-      try {
-        // pick provider based on env or logic
-        if (process.env.EMAIL_PROVIDER === "postmark") {
-          return await SendEmailPostmark({
-            to,
-            subject,
-            body,
-            htmlBody,
-          });
-        } else {
-          return await SendEmailMailerSend({
-            to,
-            subject,
-            body,
-            htmlBody,
-          });
-        }
-      } catch (err) {
-        // provider helpers return structured results, but keep catch in case they throw
-        throw err;
-      }
-    };
-
-    return await Promise.race([
-      call(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Email provider timeout")), timeoutMs)
-      ),
-    ]);
-  }
-
-  // Core processing for each message
-  private async processMessage(msg: ConsumeMessage) {
-    if (!msg) return;
-
+  private async processMessage(msg: ConsumeMessage): Promise<void> {
     let job: EmailJob;
     try {
       job = JSON.parse(msg.content.toString()) as EmailJob;
     } catch (err) {
-      logger.error("❌ Failed to parse email job:", err);
-      // bad payload — mark DB and ack to drop
-      try {
-        const notifId = (() => {
-          try {
-            const parsed = JSON.parse(msg.content.toString());
-            return parsed?.notif_id;
-          } catch {
-            return null;
-          }
-        })();
-        if (notifId) {
-          await pool.query(
-            "UPDATE notifications SET status=$1, last_error=$2, updated_at=now() WHERE id=$3",
-            ["failed", "Invalid payload", notifId]
-          );
-        }
-      } catch (e) {
-        logger.warn("⚠️ Could not update DB for invalid payload", e);
-      }
+      logger.error("❌ Invalid email payload:", err);
       this.safeAck(msg);
       return;
     }
 
     const destination = job.recipient?.destination;
     if (!destination) {
-      logger.warn(
-        JSON.stringify({ notif_id: job.notif_id, reason: "Missing recipient" })
-      );
       await pool.query(
         "UPDATE notifications SET status=$1, last_error=$2, updated_at=now() WHERE id=$3",
         ["failed", "Missing recipient", job.notif_id]
@@ -267,157 +178,94 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // prepare
-    let attemptCount = job.attempts ?? 0;
-
     const { subject, textBody, htmlBody } = this.formatEmail(job);
+    const attempts = job.attempts ?? 0;
 
     try {
-      const result = (await this.sendWithTimeout({
+      const provider = SendEmailSendGrid;
+
+      const result = await provider({
         to: destination,
         subject,
         body: textBody,
         htmlBody,
-        timeoutMs: parseInt(process.env.EMAIL_PROVIDER_TIMEOUT_MS || "30000"),
-      })) as any; // provider result object (your helpers return structured object)
+      });
 
-      // If provider returns structured { success: true/false }
-      const success = result?.success === true;
-
-      if (success) {
-        // mark sent and ack
-        attemptCount = attemptCount + 1;
+      if (result?.success) {
         await pool.query(
           "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["sent", attemptCount, null, job.notif_id]
-        );
-
-        logger.info(
-          JSON.stringify({
-            notif_id: job.notif_id,
-            to: destination,
-            attempt: attemptCount,
-            status: "sent",
-            provider: result,
-          })
+          ["sent", attempts + 1, null, job.notif_id]
         );
         this.safeAck(msg);
-        return;
+        logger.info(`✅ Email sent: ${destination}`);
       } else {
-        // provider failed (but responded)
-        attemptCount = attemptCount + 1;
-
-        const errorBlob = result?.error ?? result ?? { message: "Unknown" };
-
-        if (attemptCount >= this.maxRetries) {
-          // mark failed and send to DLQ
-          await pool.query(
-            "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-            ["failed", attemptCount, JSON.stringify(errorBlob), job.notif_id]
-          );
-
-          logger.error(
-            JSON.stringify({
-              notif_id: job.notif_id,
-              to: destination,
-              attempt: attemptCount,
-              reason: "Max retries reached",
-              error: errorBlob,
-            })
-          );
-
-          // send to DLQ (nack without requeue)
-          this.safeNack(msg, false, false);
-          return;
-        }
-
-        // schedule retry
-        await pool.query(
-          "UPDATE notifications SET attempts=$1, last_error=$2, updated_at=now() WHERE id=$3",
-          [attemptCount, JSON.stringify(errorBlob), job.notif_id]
-        );
-
-        const retryDelayMs = Math.pow(2, attemptCount) * 60 * 60 * 6 * 1000; // same backoff you used
-        await publishDeliveryDelayed(
-          { ...job, attempts: attemptCount },
-          retryDelayMs
-        );
-
-        logger.warn(
-          JSON.stringify({
-            notif_id: job.notif_id,
-            to: destination,
-            attempt: attemptCount,
-            reason: "Retry scheduled",
-            retryDelayMs,
-            error: errorBlob,
-          })
-        );
-
-        // ack this message (we moved to delayed queue)
-        this.safeAck(msg);
-        return;
+        await this.handleRetry(job, attempts + 1, result, msg);
       }
     } catch (err: unknown) {
-      // network timeout or unexpected error
-      const errMsg = err instanceof Error ? err.message : String(err);
-      attemptCount = attemptCount + 1;
+      const errorMsg = err instanceof Error ? err.message : JSON.stringify(err);
+      logger.error(`❌ Email send failed: ${errorMsg}`);
+      await this.handleRetry(job, attempts + 1, errorMsg, msg);
+    }
+  }
 
-      logger.warn(
-        JSON.stringify({
-          notif_id: job.notif_id,
-          to: destination,
-          attempt: attemptCount,
-          reason: "Exception during send",
-          error: errMsg,
-        })
-      );
-
-      // update attempts & last_error
+  private async handleRetry(
+    job: EmailJob,
+    nextAttempts: number,
+    error: any,
+    msg: ConsumeMessage
+  ): Promise<void> {
+    if (nextAttempts > this.maxRetries) {
       await pool.query(
-        "UPDATE notifications SET attempts=$1, last_error=$2, updated_at=now() WHERE id=$3",
-        [attemptCount, errMsg, job.notif_id]
+        "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
+        ["failed", nextAttempts, JSON.stringify(error), job.notif_id]
       );
+      this.safeNack(msg, false, false);
+      logger.error(
+        `❌ Max retries reached for ${job.notif_id}. Sent to DLQ or discarded.`
+      );
+      return;
+    }
 
-      if (attemptCount >= this.maxRetries) {
-        // mark failed and nack to DLQ
-        await pool.query(
-          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["failed", attemptCount, errMsg, job.notif_id]
-        );
+    job.attempts = nextAttempts;
+    await pool.query(
+      "UPDATE notifications SET attempts=$1, last_error=$2, updated_at=now() WHERE id=$3",
+      [nextAttempts, JSON.stringify(error), job.notif_id]
+    );
 
-        logger.error(
-          JSON.stringify({
-            notif_id: job.notif_id,
-            to: destination,
-            attempt: attemptCount,
-            reason: "Max retries reached after exception",
-            error: errMsg,
-          })
-        );
+    const retrySchedule = [
+      30 * 60 * 1000, // 30 mins
+      2 * 60 * 60 * 1000, // 2 hrs
+      6 * 60 * 60 * 1000, // 6 hrs
+    ];
+    const retryDelayMs =
+      retrySchedule[Math.min(nextAttempts - 1, retrySchedule.length - 1)];
 
-        this.safeNack(msg, false, false);
-      } else {
-        // schedule delayed retry and ack
-        const retryDelayMs = Math.pow(2, attemptCount) * 60 * 60 * 6 * 1000;
-        await publishDeliveryDelayed(
-          { ...job, attempts: attemptCount },
-          retryDelayMs
-        );
+    await publishDeliveryDelayed(job, retryDelayMs);
+    this.safeAck(msg);
+    logger.warn(
+      `⚠️ Retry scheduled for ${job.notif_id} after ${
+        retryDelayMs / 60000
+      } minutes`
+    );
+  }
 
-        logger.warn(
-          JSON.stringify({
-            notif_id: job.notif_id,
-            to: destination,
-            attempt: attemptCount,
-            reason: "Exception - scheduled retry",
-            retryDelayMs,
-            error: errMsg,
-          })
-        );
+  private safeAck(msg: ConsumeMessage): void {
+    try {
+      this.channel?.ack(msg);
+    } catch (err) {
+      logger.error("safeAck failed:", err);
+    }
+  }
 
-        this.safeAck(msg);
-      }
+  private safeNack(
+    msg: ConsumeMessage,
+    allUpTo = false,
+    requeue = false
+  ): void {
+    try {
+      this.channel?.nack(msg, allUpTo, requeue);
+    } catch (err) {
+      logger.error("safeNack failed:", err);
     }
   }
 }

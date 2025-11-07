@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
 import { logger } from "../../utils/logger";
 import SendWhatsAppCloud from "../../helpers/sendWhatsappCloud";
+import { toTitleCase } from "../../helpers/convertToTitleCase";
 import { Pool } from "pg";
 
 const pool = new Pool({
@@ -97,8 +98,8 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
   private getTemplateName(job: WhatsAppJob): string {
     const { role, status } = job.template_vars;
 
-    if (role === "sender" && status === "queued") return "sender_queued";
-    if (role === "receiver" && status === "queued") return "receiver_queued";
+    if (role === "sender" && status === "pending") return "sender_queued";
+    if (role === "receiver" && status === "pending") return "receiver_queued";
     if ((role === "sender" || role === "receiver") && status === "dispatched")
       return "dispatched_update";
     if ((role === "sender" || role === "receiver") && status === "arrived")
@@ -211,7 +212,7 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
   ) {
     await pool.query(
       "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-      ["queue", attempts, JSON.stringify(error), job.notif_id]
+      ["queued", attempts, JSON.stringify(error), job.notif_id]
     );
     logger.warn(
       JSON.stringify({

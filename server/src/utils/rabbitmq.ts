@@ -148,10 +148,6 @@ export async function publishDeliveryDelayed(
   const baseQueue = CHANNEL_QUEUES[payload.channel];
   if (!baseQueue) throw new Error(`Unknown channel: ${payload.channel}`);
 
-  // If not sms
-  // if (payload.channel !== "sms")
-  //   throw new Error("Delayed delivery is only implemented for SMS");
-
   const delayedQueue = DELAYED_QUEUES[payload.channel];
   if (!delayedQueue) throw new Error("Delayed queue not defined for channel");
 

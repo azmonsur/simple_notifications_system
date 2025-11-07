@@ -1,9 +1,9 @@
 // src/notifications/notifications.service.ts
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { Pool } from "pg";
-import { encryptDestination, hashDestination } from "./utils/crypto";
-import { publishDelivery } from "../utils/rabbitmq";
-import { CreateNotificationDto } from "../dto/notifications.dto";
+import { encryptDestination } from "./utils/crypto";
+import { publishDelivery, getChannel } from "../../utils/rabbitmq";
+import { CreateNotificationDto } from "./dto/notifications.dto";
 import { v4 as uuidv4 } from "uuid";
 
 const pool = new Pool({
@@ -129,7 +129,6 @@ export class NotificationsService {
         try {
           const encrypted = encryptDestination(destination);
 
-          // ✅ Determine post_office_center based on role + status
           let postOfficeCenter: string | null = null;
           if (
             (r.role === "sender" && parcel_status === "pending") ||
@@ -169,11 +168,11 @@ export class NotificationsService {
 
           const notif = notifRes.rows[0];
 
-          // Publish notification to RabbitMQ
           await publishDelivery({
             notif_id: notif.id,
             parcel_id: parcelId,
             channel: ch,
+            post_office_center: postOfficeCenter,
             recipient: {
               name: r.name,
               role: r.role,
@@ -217,35 +216,70 @@ export class NotificationsService {
     }
   }
 
-  // --- Mark notification as queued and republish
+  // --- Mark notification as queued, republish, and remove from DLQ
   async markQueued(id: string) {
     try {
+      const res = await pool.query(
+        "SELECT * FROM notifications WHERE id=$1 and status=$2",
+        [id, "failed"]
+      );
+      const notif = res.rows[0];
+      if (!notif) {
+        console.error("⚠️ Notification not found or not failed");
+        return;
+      }
+
       await pool.query(
         "UPDATE notifications SET status=$1, attempts=0, updated_at=now() WHERE id=$2",
         ["queued", id]
       );
 
-      const res = await pool.query("SELECT * FROM notifications WHERE id=$1", [
-        id,
-      ]);
-      const notif = res.rows[0];
-      if (!notif) return;
-
       await publishDelivery({
         notif_id: id,
         parcel_id: notif.parcel_id,
         channel: notif.channel,
+        post_office_center: notif.post_office_center,
         recipient: {
           name: notif.recipient_name,
           role: notif.recipient_role,
           destination: notif.recipient_destination,
         },
-        template_vars: JSON.parse(notif.template_vars),
+        template_vars:
+          typeof notif.template_vars === "string"
+            ? JSON.parse(notif.template_vars)
+            : notif.template_vars,
         created_at: new Date().toISOString(),
       });
+
+      // ✅ Remove message from DLQ (create a normal non-confirm channel)
+      const amqp = require("amqplib");
+      const connection = await amqp.connect(
+        process.env.RABBITMQ_URL || "amqp://localhost"
+      );
+      const channel = await connection.createChannel();
+
+      const dlqName = `notifications.${notif.channel}.dlq`;
+      await channel.assertQueue(dlqName, { durable: true });
+
+      const msg = await channel.get(dlqName, { noAck: false });
+      if (msg) {
+        channel.ack(msg);
+        console.log(`🧹 Removed 1 message from DLQ: ${dlqName}`);
+      } else {
+        console.log(`ℹ️ No message found in DLQ: ${dlqName}`);
+      }
+
+      await channel.close();
+      await connection.close();
+
+      console.log(`✅ Notification ${id} requeued successfully`);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`❌ markQueued failed: ${errMsg}`);
+      await pool.query(
+        "UPDATE notifications SET status=$1, attempts=0, updated_at=now() WHERE id=$2",
+        ["failed", id]
+      );
       throw new InternalServerErrorException("Database update failed");
     }
   }

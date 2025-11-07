@@ -10,23 +10,33 @@ import { logger } from "./utils/logger";
 dotenv.config();
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { logger: false });
+  try {
+    const app = await NestFactory.create(AppModule, { logger: false });
 
-  // Enable global validation
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // remove unknown properties
-      forbidNonWhitelisted: true, // throw error on unknown properties
-      transform: true, // auto-transform plain objects to DTO instances
-    })
-  );
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      })
+    );
 
-  app.use(helmet());
-  app.use(json({ limit: "100kb" }));
+    app.use(helmet());
+    app.use(json({ limit: "100kb" }));
 
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
+    // ✅ Enable CORS
+    app.enableCors({
+      origin: "*", // allow all origins
+      methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+      allowedHeaders: "Content-Type, Accept, Authorization",
+    });
 
-  logger.info(`Notification server listening on ${port}`);
+    const port = process.env.PORT || 3000;
+    await app.listen(port);
+
+    logger.info(`Notification server listening on ${port}`);
+  } catch (error) {
+    logger.error(error);
+  }
 }
 bootstrap();

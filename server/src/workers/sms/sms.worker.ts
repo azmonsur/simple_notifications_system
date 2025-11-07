@@ -120,9 +120,9 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     }).format(amount);
 
     switch (true) {
-      case role === "sender" && status === "queued":
+      case role === "sender" && status === "pending":
         return `Hi ${customerName}, Thank you for your shipment. Order ${trackingNumber} estimated charges: ${formattedAmount}.`;
-      case role === "receiver" && status === "queued":
+      case role === "receiver" && status === "pending":
         return `Hi ${customerName}, A shipment has been sent for you. Order Id: ${trackingNumber}.`;
       case (role === "sender" || role === "receiver") &&
         status === "dispatched":
@@ -210,7 +210,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
       } else {
         await pool.query(
           "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["queue", nextAttempts, JSON.stringify(smsResponse), job.notif_id]
+          ["queued", nextAttempts, JSON.stringify(smsResponse), job.notif_id]
         );
         logger.warn(JSON.stringify(smsResponse?.message));
         await this.handleRetry(job, nextAttempts, smsResponse, msg);

@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import convertToInternational from "./convertToInternational";
 import { logger } from "../utils/logger";
 
 interface SendWhatsAppOptions {
@@ -38,6 +39,16 @@ const SendWhatsApp = async ({
   }
 
   let requestBody: any;
+
+  // ✅ Convert number to international format
+
+  try {
+    to = convertToInternational(to);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.error(`❌ Invalid phone number "${to}": ${errMsg}`);
+    return { success: false, message: `Invalid phone number: ${errMsg}` };
+  }
 
   if (templateName) {
     requestBody = {

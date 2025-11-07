@@ -1,29 +1,42 @@
-import { Controller, Post, Body, Get, Query, Param } from "@nestjs/common";
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Query,
+  Param,
+  UseGuards,
+} from "@nestjs/common";
 import { NotificationsService } from "./notifications.service";
-import { CreateNotificationDto } from "../dto/notifications.dto";
+import { CreateNotificationDto } from "./dto/notifications.dto";
 
-@Controller()
+import { JwtAuthGuard } from "../auth/jwt.guard";
+@Controller("api/v1")
 export class NotificationsController {
   constructor(private svc: NotificationsService) {}
 
-  @Post("api/v1/message")
+  @Post("message")
   async webhook(@Body() event: CreateNotificationDto) {
     await this.svc.createFromEvent(event);
     return { status: "accepted" };
   }
 
-  @Get("api/v1/admin/notifications")
+  @UseGuards(JwtAuthGuard)
+  @Get("admin/notifications/failed")
   async listFailed(@Query("limit") limit?: string) {
+    console.log(limit);
     return { data: await this.svc.listFailed(limit ? parseInt(limit) : 100) };
   }
 
-  @Post("api/v1/admin/notifications/:id/retry")
+  @UseGuards(JwtAuthGuard)
+  @Post("admin/notifications/:id/retry")
   async retry(@Param("id") id: string) {
     await this.svc.markQueued(id);
     return { status: "queued" };
   }
 
-  @Post("api/v1/admin/notifications/:id/resolve")
+  @UseGuards(JwtAuthGuard)
+  @Post("admin/notifications/:id/resolve")
   async resolve(@Param("id") id: string) {
     await this.svc.markResolved(id);
     return { status: "resolved" };
