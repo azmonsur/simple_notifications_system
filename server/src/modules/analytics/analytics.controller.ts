@@ -13,6 +13,20 @@ export class AnalyticsController {
     return { data: await this.analyticsService.getNotificationSummary() };
   }
 
+  @Get("notifications/channel-status")
+  async getNotificationsByChannelAndStatus() {
+    return {
+      data: await this.analyticsService.getNotificationsByChannelAndStatus(),
+    };
+  }
+
+  @Get("notifications/channel-status-dash")
+  async getNotificationsByChannelAndStatusDash() {
+    return {
+      data: await this.analyticsService.getNotificationsByChannelAndStatusDash(),
+    };
+  }
+
   @Get("notifications/channel")
   async getNotificationsByChannel() {
     return { data: await this.analyticsService.getNotificationsByChannel() };

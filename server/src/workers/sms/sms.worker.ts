@@ -1,4 +1,4 @@
-// src/workers/sms-worker.service.ts
+// src/workers/sms/sms.worker.service.ts
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
 import { logger } from "../../utils/logger";
@@ -6,12 +6,14 @@ import SendSMSTermii from "../../helpers/sendSMSTermii";
 import { Pool } from "pg";
 import Bottleneck from "bottleneck";
 
+// PostgreSQL connection pool
 const pool = new Pool({
   connectionString:
     process.env.DATABASE_URL ||
     "postgres://notif:notifpass@localhost:5432/notifications",
 });
 
+// --- Interfaces ---
 interface Recipient {
   role?: "sender" | "receiver";
   name?: string;
@@ -22,6 +24,7 @@ interface TemplateVars {
   status?: string;
   tracking_number?: string;
   amount?: number;
+  post_office_center?: string;
 }
 
 interface SMSJob {
@@ -57,37 +60,36 @@ interface TermiiResponse {
   [key: string]: any;
 }
 
+// --- Worker Service ---
 @Injectable()
 export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly queueName = "notifications.sms";
   private readonly maxRetries = 3;
-  private readonly maxConcurrentJobs = 5; // prefetch + limiter concurrency
+  private readonly maxConcurrentJobs = 5;
   private channel: ConfirmChannel | null = null;
 
-  // ✅ Add Bottleneck limiter (controls concurrency and rate)
+  // Bottleneck rate limiter
   private readonly limiter = new Bottleneck({
-    minTime: 200, // 5 requests per second (Termii safe rate)
-    maxConcurrent: 2, // only 2 SMS API calls at once
+    minTime: 200, // 5 requests/sec
+    maxConcurrent: 2,
   });
 
   async onModuleInit() {
     logger.info("🚀 Starting SMS Worker...");
     const ch = await getChannel();
+
     if (!ch) {
       logger.error("❌ Failed to get RabbitMQ channel.");
       return;
     }
 
     this.channel = ch as unknown as ConfirmChannel;
-
-    // Prefetch to control number of unacked messages per worker
     this.channel.prefetch(this.maxConcurrentJobs);
 
     await this.channel.consume(
       this.queueName,
       (msg) => {
         if (!msg) return;
-        // Process with Bottleneck
         this.limiter
           .schedule(() => this.handleMessage(msg))
           .catch((err) => {
@@ -106,38 +108,62 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     logger.info("🧹 RabbitMQ channel closed gracefully.");
   }
 
+  // --- Message Formatter ---
   private formatMessage(job: SMSJob): string {
     const { recipient, template_vars } = job;
     const role = recipient.role;
-    const status = template_vars.status?.toLowerCase() || "N/A";
+    const status = (template_vars.status || "pending").toLowerCase();
     const trackingNumber = template_vars.tracking_number || "N/A";
     const amount = template_vars.amount ?? 0;
     const customerName = recipient.name || "Customer";
+    const postOfficeCenter =
+      template_vars.post_office_center || "your nearest post office";
 
     const formattedAmount = new Intl.NumberFormat("en-NG", {
       style: "currency",
       currency: "NGN",
     }).format(amount);
 
+    let textBody = "";
+
     switch (true) {
       case role === "sender" && status === "pending":
-        return `Hi ${customerName}, Thank you for your shipment. Order ${trackingNumber} estimated charges: ${formattedAmount}.`;
+        textBody = `Hi ${customerName}, Thank you for your shipment. Order (${trackingNumber}) estimated charges: ${formattedAmount}.`;
+        break;
+
       case role === "receiver" && status === "pending":
-        return `Hi ${customerName}, A shipment has been sent for you. Order Id: ${trackingNumber}.`;
-      case (role === "sender" || role === "receiver") &&
-        status === "dispatched":
-        return `Hi ${customerName}, your shipment ${trackingNumber} is dispatched.`;
-      case (role === "sender" || role === "receiver") && status === "arrived":
-        return `Hi ${customerName}, your shipment ${trackingNumber} is ready for collection.`;
+        textBody = `Hi ${customerName}, A shipment with tracking ID (${trackingNumber}) has been booked for you.`;
+        break;
+
+      case role === "sender" && status === "dispatched":
+        textBody = `Hi ${customerName}, Your shipment (${trackingNumber}) has been dispatched.`;
+        break;
+
+      case role === "receiver" && status === "dispatched":
+        textBody = `Hi ${customerName}, Your shipment (${trackingNumber}) has been dispatched to ${postOfficeCenter}.`;
+        break;
+
+      case (role === "receiver" || role === "sender") && status === "arrived":
+        textBody = `Hi ${customerName}, Your shipment (${trackingNumber}) has arrived at ${postOfficeCenter} and is ready for collection.`;
+        break;
+
       case role === "sender" && status === "received":
-        return `Hi ${customerName}, your shipment ${trackingNumber} has been received.`;
+        textBody = `Hi ${customerName}, Your shipment (${trackingNumber}) has been collected.`;
+        break;
+
       case role === "receiver" && status === "received":
-        return `Hi ${customerName}, you have received shipment ${trackingNumber}.`;
+        textBody = `Hi ${customerName}, You have successfully collected your shipment (${trackingNumber}) at ${postOfficeCenter}.`;
+        break;
+
       default:
-        return `Hi ${customerName}, your package ${trackingNumber} has a status update: ${status}.`;
+        textBody = `Hi ${customerName}, Your package ${trackingNumber} has a status update: ${status}.`;
+        break;
     }
+
+    return textBody;
   }
 
+  // --- Message Handler ---
   private async handleMessage(msg: ConsumeMessage) {
     if (!this.channel) return;
 
@@ -164,7 +190,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // ✅ Restrict SMS sending to window (08:00–20:00)
+    // Time-based restriction (8 AM – 8 PM)
     const now = new Date();
     const hour = now.getHours();
     const sendWindowStart = parseInt(process.env.SMS_WINDOW_START || "8");
@@ -221,6 +247,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // --- Retry Logic ---
   private async handleRetry(
     job: SMSJob,
     nextAttempts: number,
@@ -253,9 +280,9 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
       [nextAttempts, JSON.stringify(smsResponse), job.notif_id]
     );
 
-    // ✅ Progressive backoff schedule
+    // Progressive backoff delay schedule
     const retrySchedule = [
-      30 * 60 * 1000, // 30 min
+      30 * 60 * 1000, // 30 mins
       2 * 60 * 60 * 1000, // 2 hours
       6 * 60 * 60 * 1000, // 6 hours
     ];

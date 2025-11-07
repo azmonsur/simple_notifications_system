@@ -8,3 +8,4 @@
 | `GET /api/v1/admin/analytics/parcels/transitions`          | Count of parcel status changes           |
 | `GET /api/v1/admin/analytics/notifications/avg-per-parcel` | Average notifications per parcel         |
 | `GET /api/v1/admin/analytics/parcels/total`                | Total parcels handled                    |
+| `GET /api/v1/admin/analytics/notifications/channel-status` | Parcel by channel by status              |

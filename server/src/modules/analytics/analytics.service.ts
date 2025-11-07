@@ -18,12 +18,70 @@ export class AnalyticsService {
           status,
           COUNT(*)::int AS total
         FROM notifications
-        GROUP BY status;
+        GROUP BY status
+        ORDER BY status DESC;
       `);
       return res.rows;
     } catch (err) {
       throw new InternalServerErrorException(
         "Failed to fetch notification summary"
+      );
+    }
+  }
+
+  // src/analytics/analytics.service.ts
+  async getNotificationsByChannelAndStatus() {
+    try {
+      const res = await pool.query(`
+      SELECT 
+        channel,
+        status,
+        COUNT(*)::int AS total
+      FROM notifications
+      GROUP BY channel, status
+      ORDER BY channel, status;
+    `);
+
+      // Transform the rows into grouped structure
+      const grouped: Record<string, any> = {};
+      res.rows.forEach((row) => {
+        const { channel, status, total } = row;
+        if (!grouped[channel])
+          grouped[channel] = {
+            channel,
+            sent: 0,
+            queued: 0,
+            failed: 0,
+            total: 0,
+          };
+        grouped[channel][status] = total;
+        grouped[channel].total += total;
+      });
+
+      return Object.values(grouped);
+    } catch (err) {
+      throw new InternalServerErrorException(
+        "Failed to fetch channel-by-status analytics"
+      );
+    }
+  }
+
+  // Add this in analytics.service.ts
+  async getNotificationsByChannelAndStatusDash() {
+    try {
+      const res = await pool.query(`
+      SELECT 
+        channel,
+        status,
+        COUNT(*)::int AS total
+      FROM notifications
+      GROUP BY channel, status
+      ORDER BY channel, status;
+    `);
+      return res.rows;
+    } catch (err) {
+      throw new InternalServerErrorException(
+        "Failed to fetch detailed channel analytics"
       );
     }
   }

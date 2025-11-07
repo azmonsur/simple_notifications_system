@@ -122,15 +122,15 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
 
     switch (true) {
       case role === "sender" && status === "pending":
-        textBody = `Hi ${customerName}, Thank you for your shipment at ${postOfficeCenter}. Order ${trackingNumber} estimated charges: ${formattedAmount}.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Thank you for your shipment at ${postOfficeCenter}. Order <strong>${trackingNumber}</strong> estimated charges: <strong>${formattedAmount}</strong>.</p>`;
+        textBody = `Hi ${customerName}, Thank you for your shipment at ${postOfficeCenter}. Order (${trackingNumber}) estimated charges: ${formattedAmount}.`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Thank you for your shipment at ${postOfficeCenter}. Order (<strong>${trackingNumber}</strong>) estimated charges: <strong>${formattedAmount}</strong>.</p>`;
         break;
       case role === "receiver" && status === "pending":
-        textBody = `Hi ${customerName}, A shipment with tracking ID (${trackingNumber}) has been taken for you at ${postOfficeCenter}.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>A shipment with tracking ID (<strong>${trackingNumber}</strong>) has been taken for you.</p>`;
+        textBody = `Hi ${customerName}, A shipment with tracking ID (${trackingNumber}) has been booked for you..`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>A shipment with tracking ID (<strong>${trackingNumber}</strong>) has been booked for you.</p>`;
         break;
       case role === "sender" && status === "dispatched":
-        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has been dispatched to ${postOfficeCenter}.`;
+        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has been dispatched.`;
         htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has been dispatched.</p>`;
         break;
       case role === "receiver" && status === "dispatched":
@@ -138,8 +138,8 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
         htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has been dispatched to ${postOfficeCenter}.</p>`;
         break;
       case (role === "receiver" || role === "sender") && status === "arrived":
-        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) is ready for collection at ${postOfficeCenter}.`;
-        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) is ready for collection at ${postOfficeCenter}.</p>`;
+        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has arrived at ${postOfficeCenter} and is ready for collection .`;
+        htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has arrived at ${postOfficeCenter} and is ready for collection.</p>`;
         break;
       case role === "sender" && status === "received":
         textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has been collected.`;
