@@ -1,10 +1,15 @@
 // src/notifications/notifications.service.ts
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from "@nestjs/common";
+
 import { Pool } from "pg";
 import { encryptDestination } from "./utils/crypto";
 import { publishDelivery, getChannel } from "../../utils/rabbitmq";
 import { CreateNotificationDto } from "./dto/notifications.dto";
-import { v4 as uuidv4 } from "uuid";
+import { query as dbQuery } from "../../utils/db";
 
 const pool = new Pool({
   connectionString:
@@ -14,10 +19,11 @@ const pool = new Pool({
 
 @Injectable()
 export class NotificationsService {
+  private logger = new Logger("NotificationsService");
   /**
    * Create or update parcels and generate notifications
    */
-  async createFromEvent(event: CreateNotificationDto) {
+  async createFromEvent(event: CreateNotificationDto, ip: string) {
     if (!event?.payload) {
       console.error("❌ Invalid event: missing payload");
       throw new InternalServerErrorException("Missing event payload");
@@ -37,7 +43,7 @@ export class NotificationsService {
 
     // --- Upsert parcel and get parcelId
     try {
-      const res = await pool.query(
+      const res = await dbQuery(
         `INSERT INTO parcels (
         tracking_number, sender_name, sender_phone, sender_email,
         receiver_name, receiver_phone, receiver_email, amount, current_status,
@@ -75,13 +81,15 @@ export class NotificationsService {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`❌ Parcel DB operation failed: ${errMsg}`);
+      this.logger.error(`Webhook error from IP ${ip || "unknown"}: ${errMsg}`);
       throw new InternalServerErrorException("Parcel DB operation failed");
     }
 
     // --- Check if status already exists in parcel_history
+    let last_status: string;
     try {
-      const historyRes = await pool.query(
-        `SELECT new_status FROM parcel_history WHERE parcel_id = $1`,
+      const historyRes = await dbQuery(
+        `SELECT new_status, changed_at FROM parcel_history WHERE parcel_id = $1 order by changed_at desc`,
         [parcelId]
       );
 
@@ -93,6 +101,8 @@ export class NotificationsService {
         );
         return; // Exit without inserting notifications
       }
+
+      last_status = existingStatuses[0];
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`❌ Failed to check parcel history: ${errMsg}`);
@@ -101,10 +111,10 @@ export class NotificationsService {
 
     // --- Insert new parcel_history record
     try {
-      await pool.query(
+      await dbQuery(
         `INSERT INTO parcel_history (parcel_id, old_status, new_status, changed_by)
        VALUES ($1, $2, $3, $4)`,
-        [parcelId, null, parcel_status, "system"]
+        [parcelId, last_status, parcel_status, "system"]
       );
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -142,7 +152,7 @@ export class NotificationsService {
                 : destination_center ?? null;
           }
 
-          const notifRes = await pool.query(
+          const notifRes = await dbQuery(
             `INSERT INTO notifications (
             parcel_id, channel, recipient_role, recipient_name, recipient_destination,
             template_vars, status, attempts, post_office_center
@@ -200,7 +210,7 @@ export class NotificationsService {
   // --- List failed notifications
   async listFailed(limit = 100) {
     try {
-      const res = await pool.query(
+      const res = await dbQuery(
         `SELECT id, parcel_id, channel, recipient_role, recipient_name, recipient_destination, last_error, attempts, created_at
          FROM notifications
          WHERE status = $1
@@ -219,7 +229,7 @@ export class NotificationsService {
   // --- Mark notification as queued, republish, and remove from DLQ
   async markQueued(id: string) {
     try {
-      const res = await pool.query(
+      const res = await dbQuery(
         "SELECT * FROM notifications WHERE id=$1 and status=$2",
         [id, "failed"]
       );
@@ -229,7 +239,7 @@ export class NotificationsService {
         return;
       }
 
-      await pool.query(
+      await dbQuery(
         "UPDATE notifications SET status=$1, attempts=0, updated_at=now() WHERE id=$2",
         ["queued", id]
       );
@@ -276,7 +286,7 @@ export class NotificationsService {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`❌ markQueued failed: ${errMsg}`);
-      await pool.query(
+      await dbQuery(
         "UPDATE notifications SET status=$1, attempts=0, updated_at=now() WHERE id=$2",
         ["failed", id]
       );
@@ -287,7 +297,7 @@ export class NotificationsService {
   // --- Mark notification as resolved
   async markResolved(id: string) {
     try {
-      await pool.query(
+      await dbQuery(
         "UPDATE notifications SET status=$1, updated_at=now() WHERE id=$2",
         ["resolved", id]
       );

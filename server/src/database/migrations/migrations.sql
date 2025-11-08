@@ -89,3 +89,9 @@ WITH moved AS (
 )
 INSERT INTO notifications_archive
 SELECT * FROM moved;
+
+
+
+GRANT USAGE, SELECT ON SEQUENCE users_id_seq TO notif;
+GRANT UPDATE ON SEQUENCE users_id_seq TO notif;
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE users_id_seq TO postgres;

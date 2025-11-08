@@ -1,36 +1,23 @@
 {
-  "success": false,
-  "message": "Unauthorized",
-  "error": {
-    "message": "Unauthorized",
-    "code": 401,
-    "response": {
-      "headers": {
-        "server": "nginx",
-        "date": "Thu, 06 Nov 2025 11:30:34 GMT",
-        "content-type": "application/json",
-        "content-length": "116",
-        "connection": "keep-alive",
-        "access-control-allow-origin": "https://sendgrid.api-docs.io",
-        "access-control-allow-methods": "POST",
-        "access-control-allow-headers": "Authorization, Content-Type, On-behalf-of, x-sg-elas-acl",
-        "access-control-max-age": "600",
-        "x-no-cors-reason": "https://sendgrid.com/docs/Classroom/Basics/API/cors.html",
-        "strict-transport-security": "max-age=31536000; includeSubDomains",
-        "content-security-policy": "frame-ancestors 'none'",
-        "cache-control": "no-cache",
-        "x-content-type-options": "no-sniff",
-        "referrer-policy": "strict-origin-when-cross-origin"
-      },
-      "body": {
-        "errors": [
-          {
-            "message": "The provided authorization grant is invalid, expired, or revoked",
-            "field": null,
-            "help": null
-          }
-        ]
-      }
+  "payload": {
+    "tracking_number": "NIP603CVB",
+    "parcel_status": "pending",
+    "amount": 1000,
+    "origin_center": "Abuja office",
+    "destination_center": "Lagos office",
+    "sender": {
+      "name": "Biola Abodunrin",
+      "phone": "+2348132329187",
+      "email": "info@cyberbridgesoft.com",
+      "preferred_channels": ["whatsapp"]
+    },
+    "receiver": {
+      "name": "Azeez Monsur",
+      "phone": "+2347046147122",
+      "email": "monsur.koa@gmail.com",
+      "preferred_channels": ["whatsapp"]
     }
-  }
+  },
+  "email": "info@cyberbridgesoft.com",
+  "password": "Admin@123"
 }

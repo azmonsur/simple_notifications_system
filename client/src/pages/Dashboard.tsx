@@ -66,6 +66,37 @@ function useCountUp(value: number | string | undefined, duration = 900) {
   return display;
 }
 
+function getMonthName() {
+  const date: number = new Date().getMonth();
+
+  const monthName =
+    date === 0
+      ? "Jan"
+      : date === 1
+      ? "Feb"
+      : date === 2
+      ? "Mar"
+      : date === 3
+      ? "Apr"
+      : date === 4
+      ? "May"
+      : date === 5
+      ? "Jun"
+      : date === 6
+      ? "Jul"
+      : date === 7
+      ? "Aug"
+      : date === 8
+      ? "Sep"
+      : date === 9
+      ? "Oct"
+      : date === 10
+      ? "Nov"
+      : "Dec";
+
+  return monthName;
+}
+
 /* ============================
    Dashboard Component
    ============================ */
@@ -117,7 +148,7 @@ export default function Dashboard(): JSX.Element {
         ] = await Promise.allSettled([
           api.get("/analytics/notifications/summary"),
           api.get("/analytics/notifications/channel"),
-          api.get("/analytics/notifications/channel-status-dash"), // <--- your endpoint
+          api.get("/analytics/notifications/channel-status-dash"),
           api.get("/analytics/parcels/status"),
           api.get("/analytics/notifications/recipient-role"),
           api.get("/analytics/parcels/average-duration"),
@@ -301,7 +332,7 @@ export default function Dashboard(): JSX.Element {
         legend: { position: "right" as const, labels: { color: colors.text } },
         title: {
           display: true,
-          text: "Notifications by Channel & Status (Stacked)",
+          text: "Notifications by Channel & Status (stacked)",
         },
         tooltip: { mode: "index", intersect: false },
       },
@@ -378,14 +409,14 @@ export default function Dashboard(): JSX.Element {
 
   const statusBar = useMemo(
     () => ({
-      labels: parcelsByStatus.map((p) => p.current_status),
+      labels: parcelsByStatus.map((p) => p.new_status),
       datasets: [
         {
           label: "Parcels",
           data: parcelsByStatus.map((p) => p.total),
           backgroundColor: darkMode
             ? "rgba(34,197,94,0.6)"
-            : "rgba(34,197,94,0.7)",
+            : "rgba(20, 169, 55, 0.35)",
         },
       ],
     }),
@@ -480,7 +511,7 @@ export default function Dashboard(): JSX.Element {
 
       {/* Top metrics */}
       <motion.section
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8"
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, amount: 0.2 }}
@@ -501,6 +532,19 @@ export default function Dashboard(): JSX.Element {
           whileHover={{ scale: 1.02 }}
           className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
         >
+          <div className="text-sm text-gray-400">
+            Total Sent ( {getMonthName()})
+          </div>
+          <div className="text-3xl font-bold text-green-500">{sentCount}</div>
+          <div className="text-xs text-gray-400 mt-2">
+            Total sent this month
+          </div>
+        </motion.div>
+
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
+        >
           <div className="text-sm text-gray-400">Total Failed</div>
           <div className="text-3xl font-bold text-red-500">{failedCount}</div>
           <div className="text-xs text-gray-400 mt-2">Failed deliveries</div>
@@ -510,7 +554,7 @@ export default function Dashboard(): JSX.Element {
           whileHover={{ scale: 1.02 }}
           className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
         >
-          <div className="text-sm text-gray-400">Queued</div>
+          <div className="text-sm text-gray-400">Total Queued</div>
           <div className="text-3xl font-bold text-yellow-500">
             {queuedCount}
           </div>
@@ -521,7 +565,7 @@ export default function Dashboard(): JSX.Element {
           whileHover={{ scale: 1.02 }}
           className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
         >
-          <div className="text-sm text-gray-400">Parcels</div>
+          <div className="text-sm text-gray-400">Total Parcels</div>
           <div className="text-3xl font-bold text-indigo-400">
             {parcelsCount}
           </div>

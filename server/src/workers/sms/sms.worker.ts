@@ -221,6 +221,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     const nextAttempts = attempts + 1;
 
     try {
+      logger.info("");
       smsResponse = await SendSMSTermii({
         to: job.recipient.destination,
         body,

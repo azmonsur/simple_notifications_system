@@ -66,6 +66,8 @@ const SendSMSTermii = async ({
 
     const data = response.data;
 
+    console.log(response.data);
+
     const isSuccess =
       (data?.status && data.status.toLowerCase() === "success") ||
       (data?.code && data.code.toLowerCase() === "ok");

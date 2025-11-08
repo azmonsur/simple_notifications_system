@@ -1,19 +1,14 @@
 // src/analytics/analytics.service.ts
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { Pool } from "pg";
-
-const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    "postgres://notif:notifpass@localhost:5432/notifications",
-});
+import { query as dbQuery } from "../../utils/db";
 
 @Injectable()
 export class AnalyticsService {
   // 1️⃣ Notification summary (sent, queued, failed)
   async getNotificationSummary() {
     try {
-      const res = await pool.query(`
+      const res = await dbQuery(`
         SELECT 
           status,
           COUNT(*)::int AS total
@@ -32,7 +27,7 @@ export class AnalyticsService {
   // src/analytics/analytics.service.ts
   async getNotificationsByChannelAndStatus() {
     try {
-      const res = await pool.query(`
+      const res = await dbQuery(`
       SELECT 
         channel,
         status,
@@ -69,7 +64,7 @@ export class AnalyticsService {
   // Add this in analytics.service.ts
   async getNotificationsByChannelAndStatusDash() {
     try {
-      const res = await pool.query(`
+      const res = await dbQuery(`
       SELECT 
         channel,
         status,
@@ -89,7 +84,7 @@ export class AnalyticsService {
   // 2️⃣ Total notifications per channel
   async getNotificationsByChannel() {
     try {
-      const res = await pool.query(`
+      const res = await dbQuery(`
         SELECT 
           channel,
           COUNT(*)::int AS total
@@ -108,7 +103,7 @@ export class AnalyticsService {
   // 3️⃣ Total notifications per recipient role
   async getNotificationsByRecipientRole() {
     try {
-      const res = await pool.query(`
+      const res = await dbQuery(`
         SELECT 
           recipient_role,
           COUNT(*)::int AS total
@@ -126,13 +121,13 @@ export class AnalyticsService {
   // 4️⃣ Parcels summary by current_status
   async getParcelsByStatus() {
     try {
-      const res = await pool.query(`
-        SELECT 
-          current_status,
+      const res = await dbQuery(`
+         SELECT 
+          new_status,
           COUNT(*)::int AS total
-        FROM parcels
-        GROUP BY current_status
-        ORDER BY current_status;
+        FROM parcel_history
+        GROUP BY new_status
+        ORDER BY new_status;
       `);
       return res.rows;
     } catch (err) {
@@ -143,7 +138,7 @@ export class AnalyticsService {
   // 5️⃣ Average time (in hours) per parcel from first to last status
   async getAverageParcelDuration() {
     try {
-      const res = await pool.query(`
+      const res = await dbQuery(`
         WITH parcel_durations AS (
           SELECT 
             parcel_id,
@@ -166,7 +161,7 @@ export class AnalyticsService {
   // 6️⃣ Parcel transitions count (how many times each status occurred)
   async getParcelStatusTransitionCounts() {
     try {
-      const res = await pool.query(`
+      const res = await dbQuery(`
         SELECT 
           new_status,
           COUNT(*)::int AS transitions
@@ -185,7 +180,7 @@ export class AnalyticsService {
   // 7️⃣ Average number of notifications per parcel
   async getAvgNotificationsPerParcel() {
     try {
-      const res = await pool.query(`
+      const res = await dbQuery(`
         SELECT 
           ROUND(AVG(cnt)::numeric, 2) AS avg_notif_per_parcel
         FROM (
@@ -205,9 +200,7 @@ export class AnalyticsService {
   // 8️⃣ Total parcels handled (for overall metric)
   async getTotalParcels() {
     try {
-      const res = await pool.query(
-        `SELECT COUNT(*)::int AS total FROM parcels;`
-      );
+      const res = await dbQuery(`SELECT COUNT(*)::int AS total FROM parcels;`);
       return res.rows[0];
     } catch (err) {
       throw new InternalServerErrorException("Failed to get total parcels");
