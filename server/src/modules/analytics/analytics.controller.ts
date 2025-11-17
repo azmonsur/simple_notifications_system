@@ -4,8 +4,8 @@ import { AnalyticsService } from "./analytics.service";
 import { JwtAuthGuard } from "../auth/jwt.guard";
 import { Throttle } from "@nestjs/throttler";
 
-@UseGuards(JwtAuthGuard)
-@Throttle({ default: { limit: 20, ttl: 60 } }) // max 20 requests per IP per 60 seconds
+// @UseGuards(JwtAuthGuard)
+@Throttle({ default: { limit: 100, ttl: 60 } }) // max 100 requests per IP per 60 seconds
 @Controller("api/v1/admin/analytics")
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
@@ -13,6 +13,11 @@ export class AnalyticsController {
   @Get("notifications/summary")
   async getNotificationSummary() {
     return { data: await this.analyticsService.getNotificationSummary() };
+  }
+
+  @Get("notifications/sent-this-month")
+  async getNotificationSentThisMonth() {
+    return { data: await this.analyticsService.getNotificationSentThisMonth() };
   }
 
   @Get("notifications/channel-status")

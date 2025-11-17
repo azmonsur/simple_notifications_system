@@ -47,10 +47,10 @@ def send_request(_):
     try:
         response = requests.post(URL, json=data3, timeout=5)
         if response.status_code == 201 or response.status_code == 200:
-            # print(f"✅ Inserted: {data['username']}")
+            print(f"✅ Inserted: {data['username']}")
             counter += 1
         else:
-            # print(f"⚠️ Failed ({response.status_code}): {response.text}")
+            print(f"⚠️ Failed ({response.status_code}): {response.text}")
             pass
     except Exception as e:
         print(f"❌ Error: {e}")

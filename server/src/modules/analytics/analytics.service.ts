@@ -24,6 +24,21 @@ export class AnalyticsService {
     }
   }
 
+  async getNotificationSentThisMonth() {
+    try {
+      const res = await dbQuery(`
+        SELECT COUNT(y.status)::int AS sent_this_month FROM parcels x 
+        RIGHT JOIN notifications y ON x.id = y.parcel_id WHERE x.updated_at >= DATE_TRUNC('month', CURRENT_DATE) 
+        AND x.updated_at < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' AND y.status = 'sent';
+      `);
+      return res.rows;
+    } catch (err) {
+      throw new InternalServerErrorException(
+        "Failed to fetch notification summary"
+      );
+    }
+  }
+
   // src/analytics/analytics.service.ts
   async getNotificationsByChannelAndStatus() {
     try {

@@ -103,6 +103,7 @@ function getMonthName() {
 export default function Dashboard(): JSX.Element {
   // raw data
   const [summary, setSummary] = useState<any[]>([]);
+  const [sentThisMonth, setSentThisMonth] = useState<any[]>([]);
   const [byChannel, setByChannel] = useState<any[]>([]);
   const [byChannelStatus, setByChannelStatus] = useState<any[]>([]);
   const [parcelsByStatus, setParcelsByStatus] = useState<any[]>([]);
@@ -137,6 +138,7 @@ export default function Dashboard(): JSX.Element {
       try {
         const [
           summaryRes,
+          sentThisMonthRes,
           channelRes,
           channelStatusRes,
           parcelsRes,
@@ -147,6 +149,7 @@ export default function Dashboard(): JSX.Element {
           transitionsRes,
         ] = await Promise.allSettled([
           api.get("/analytics/notifications/summary"),
+          api.get("/analytics/notifications/sent-this-month"),
           api.get("/analytics/notifications/channel"),
           api.get("/analytics/notifications/channel-status-dash"),
           api.get("/analytics/parcels/status"),
@@ -159,6 +162,8 @@ export default function Dashboard(): JSX.Element {
 
         if (summaryRes.status === "fulfilled")
           setSummary(summaryRes.value.data.data || []);
+        if (sentThisMonthRes.status === "fulfilled")
+          setSentThisMonth(sentThisMonthRes.value.data.data || []);
         if (channelRes.status === "fulfilled")
           setByChannel(channelRes.value.data.data || []);
         if (channelStatusRes.status === "fulfilled")
@@ -201,6 +206,9 @@ export default function Dashboard(): JSX.Element {
   const totalSent = summary.find((s) => s.status === "sent")?.total || 0;
   const totalFailed = summary.find((s) => s.status === "failed")?.total || 0;
   const totalQueued = summary.find((s) => s.status === "queued")?.total || 0;
+
+  // sent this month sentThisMonth
+  const totalSentThisMonth = parseInt(sentThisMonth[0]?.sent_this_month);
 
   // animated counters
   const sentCount = useCountUp(totalSent);
@@ -530,12 +538,14 @@ export default function Dashboard(): JSX.Element {
 
         <motion.div
           whileHover={{ scale: 1.02 }}
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
+          className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded`}
         >
           <div className="text-sm text-gray-400">
             Total Sent ( {getMonthName()})
           </div>
-          <div className="text-3xl font-bold text-green-500">{sentCount}</div>
+          <div className="text-3xl font-bold text-brown-500">
+            {totalSentThisMonth ? totalSentThisMonth : 0}
+          </div>
           <div className="text-xs text-gray-400 mt-2">
             Total sent this month
           </div>
@@ -611,14 +621,14 @@ export default function Dashboard(): JSX.Element {
                   <div className="font-medium text-green-500">{totalSent}</div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-400">Failed</div>
-                  <div className="font-medium text-red-500">{totalFailed}</div>
-                </div>
-                <div className="flex items-center justify-between">
                   <div className="text-sm text-gray-400">Queued</div>
                   <div className="font-medium text-yellow-500">
                     {totalQueued}
                   </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-400">Failed</div>
+                  <div className="font-medium text-red-500">{totalFailed}</div>
                 </div>
               </div>
             </div>

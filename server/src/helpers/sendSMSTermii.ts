@@ -54,7 +54,7 @@ const SendSMSTermii = async ({
     sms: body,
     type: "plain",
     api_key: TERMII_API_TOKEN,
-    channel: "generic",
+    channel: "whats",
   };
 
   try {

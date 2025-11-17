@@ -4,10 +4,12 @@ import { AppModule } from "./app.module";
 import helmet from "helmet";
 import { json } from "body-parser";
 import * as dotenv from "dotenv";
+import { Request, Response, NextFunction } from "express";
 import compression from "compression";
 import { logger } from "./utils/logger";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
+import { MetricsMiddleware } from "./middleware/metrics.middleware";
 import csurf from "csurf";
 import { HttpsOptions } from "@nestjs/common/interfaces/external/https-options.interface";
 import { readFileSync } from "fs";
@@ -32,6 +34,9 @@ async function bootstrap() {
       // httpsOptions,
     });
 
+    // Metrics
+    app.use(new MetricsMiddleware().use);
+
     // Security headers
     app.use(
       helmet({
@@ -55,10 +60,27 @@ async function bootstrap() {
     app.use(
       rateLimit({
         windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 100, // limit each IP to 100 requests per windowMs
+        max: 1500, // limit each IP to 100 requests per windowMs
         message: "Too many requests from this IP, please try again later",
       })
     );
+
+    // const nipostInternalIPs = [
+    //   "10.0.0.0/8",
+    //   "192.168.1.0/24",
+    //   // "::1",
+    //   // "127.0.0.1",
+    // ];
+    // app.use((req: Request, res: Response, next: NextFunction) => {
+    //   const ip = req.ip || req.connection.remoteAddress;
+    //   if (nipostInternalIPs.some((subnet) => ip?.startsWith(subnet))) {
+    //     return next(); // skip rate limiting
+    //   }
+    //   return rateLimit({
+    //     windowMs: 15 * 60 * 1000,
+    //     max: 5000,
+    //   })(req, res, next);
+    // });
 
     // CSRF protection
     app.use(cookieParser());

@@ -1,12 +1,11 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
 import { logger } from "../../utils/logger";
-import SendEmailPostmark from "../../helpers/sendEmailPostmark";
-import SendEmailMailerSend from "../../helpers/sendEmailMailersend";
 import SendEmailSendGrid from "../../helpers/sendEmailSendgrid";
 import { toTitleCase } from "../../helpers/convertToTitleCase";
 import Bottleneck from "bottleneck";
 import { Pool } from "pg";
+import { generateReceiptPDF } from "../../helpers/generateReceiptPDF";
 
 const pool = new Pool({
   connectionString:
@@ -126,7 +125,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
         htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Thank you for your shipment at ${postOfficeCenter}. Order (<strong>${trackingNumber}</strong>) estimated charges: <strong>${formattedAmount}</strong>.</p>`;
         break;
       case role === "receiver" && status === "pending":
-        textBody = `Hi ${customerName}, A shipment with tracking ID (${trackingNumber}) has been booked for you..`;
+        textBody = `Hi ${customerName}, A shipment with tracking ID (${trackingNumber}) has been booked for you.`;
         htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>A shipment with tracking ID (<strong>${trackingNumber}</strong>) has been booked for you.</p>`;
         break;
       case role === "sender" && status === "dispatched":
@@ -138,7 +137,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
         htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has been dispatched to ${postOfficeCenter}.</p>`;
         break;
       case (role === "receiver" || role === "sender") && status === "arrived":
-        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has arrived at ${postOfficeCenter} and is ready for collection .`;
+        textBody = `Hi ${customerName}, Your shipment with tracking ID (${trackingNumber}) has arrived at ${postOfficeCenter} and is ready for collection.`;
         htmlBody = `<p>Hi <strong>${customerName}</strong>,</p><p>Your shipment with tracking ID (<strong>${trackingNumber}</strong>) has arrived at ${postOfficeCenter} and is ready for collection.</p>`;
         break;
       case role === "sender" && status === "received":
@@ -184,11 +183,40 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
     try {
       const provider = SendEmailSendGrid;
 
+      let attachments: any[] | undefined = undefined;
+
+      // ✅ Generate PDF receipt only when role="sender" & status="pending"
+      const { role } = job.recipient;
+      const status = job.template_vars.status?.toLowerCase();
+
+      if (role === "sender" && status === "pending") {
+        const pdfBuffer = await generateReceiptPDF({
+          transaction_id: job.template_vars.tracking_number,
+          date: new Date().toISOString(),
+          center: job.post_office_center,
+          source: job.post_office_center,
+          sender_name: job.recipient.name,
+          sender_email: job.recipient.destination,
+          service_type: "Parcel Shipment",
+          amount_paid: job.template_vars.amount || 0,
+          payment_method: "Cash",
+        });
+
+        attachments = [
+          {
+            filename: `NIPOST_Receipt_${job.template_vars.tracking_number}.pdf`,
+            content: pdfBuffer,
+            type: "application/pdf",
+          },
+        ];
+      }
+
       const result = await provider({
         to: destination,
         subject,
         body: textBody,
         htmlBody,
+        attachments, // 👈 optional
       });
 
       if (result?.success) {

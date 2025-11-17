@@ -99,7 +99,7 @@ export class NotificationsService {
         console.log(
           `ℹ️ Status "${parcel_status}" already exists for parcel ${tracking_number}. Skipping history & notifications.`
         );
-        return; // Exit without inserting notifications
+        return;
       }
 
       last_status = existingStatuses[0];
@@ -178,6 +178,18 @@ export class NotificationsService {
 
           const notif = notifRes.rows[0];
 
+          // 🆕 --- Prepare attachment data only for email or WhatsApp
+          let attachments = undefined;
+          if (["email", "whatsapp"].includes(ch)) {
+            attachments = [
+              {
+                filename: `receipt_${tracking_number}.pdf`,
+                content: "", // 🧠 leave empty; worker will generate and fill
+                type: "application/pdf",
+              },
+            ];
+          }
+
           await publishDelivery({
             notif_id: notif.id,
             parcel_id: parcelId,
@@ -193,6 +205,7 @@ export class NotificationsService {
               status: parcel_status,
               amount: amount ?? null,
             },
+            attachments, // 🆕 included only when defined
             created_at: new Date().toISOString(),
           });
 

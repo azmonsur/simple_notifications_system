@@ -1,3 +1,4 @@
+// helpers/sendEmailSendGrid.ts
 import sgMail from "@sendgrid/mail";
 import { logger } from "../utils/logger";
 
@@ -6,6 +7,11 @@ interface SendEmailOptions {
   htmlBody?: string;
   body: string;
   to: string;
+  attachments?: {
+    filename: string;
+    content: Buffer | string; // usually base64 string or Buffer
+    type?: string; // optional MIME type
+  }[];
 }
 
 interface EmailResponse {
@@ -21,13 +27,10 @@ const SendEmailSendGrid = async ({
   to,
   htmlBody,
   body,
+  attachments,
 }: SendEmailOptions): Promise<EmailResponse> => {
   const { SENDGRID_API_TOKEN, SENDGRID_API_FROM, SENDGRID_API_NAME } =
     process.env;
-
-  logger.error(SENDGRID_API_TOKEN);
-  logger.error(SENDGRID_API_FROM);
-  logger.error(SENDGRID_API_NAME);
 
   if (!SENDGRID_API_TOKEN || !SENDGRID_API_FROM) {
     const msg = "SendGrid environment variables not set";
@@ -36,6 +39,17 @@ const SendEmailSendGrid = async ({
   }
 
   sgMail.setApiKey(SENDGRID_API_TOKEN);
+
+  // Convert Buffers to Base64 (SendGrid requires base64 for attachments)
+  const processedAttachments = attachments?.map((file) => ({
+    filename: file.filename,
+    type: file.type || "application/octet-stream",
+    content:
+      file.content instanceof Buffer
+        ? file.content.toString("base64")
+        : Buffer.from(file.content).toString("base64"),
+    disposition: "attachment",
+  }));
 
   const msgPayload = {
     to,
@@ -46,10 +60,11 @@ const SendEmailSendGrid = async ({
     subject,
     text: body,
     html: htmlBody || body,
+    attachments: processedAttachments,
   };
 
   try {
-    const [response] = await sgMail.send(msgPayload); // sgMail.send returns an array
+    const [response] = await sgMail.send(msgPayload);
     const statusCode = response?.statusCode;
 
     if (statusCode >= 200 && statusCode < 300) {

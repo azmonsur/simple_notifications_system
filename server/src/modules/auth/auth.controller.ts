@@ -9,7 +9,9 @@ import {
 import { Request } from "express";
 import { AuthService } from "./auth.service";
 import { CreateLoginDto } from "./dto/login.dto";
+import { Throttle } from "@nestjs/throttler";
 
+@Throttle({ default: { limit: 10, ttl: 60 } }) // max 20 requests per IP per 60 seconds
 @Controller("api/v1/admin/auth")
 export class AuthController {
   private logger = new Logger("AuthController");

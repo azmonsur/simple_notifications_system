@@ -16,7 +16,7 @@ import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard";
     ThrottlerModule.forRoot([
       {
         ttl: 60, // time window in seconds
-        limit: 200, // max requests per IP in that window
+        limit: 1000, // max requests per IP in that window
       },
     ]),
 
