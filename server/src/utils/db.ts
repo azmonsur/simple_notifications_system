@@ -6,14 +6,23 @@ dotenv.config();
 
 const logger = new Logger("Postgres");
 
+// export const pool = new Pool({
+//   connectionString: process.env.POSTGRE_URL,
+//   max: 20,
+//   min: 4,
+//   idleTimeoutMillis: 30000,
+//   connectionTimeoutMillis: 5000,
+//   // ssl: true, // required for Supabase
+// });
+
+console.log("Connecting to Postgres at:", process.env.POSTGRE_HOST);
 export const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    "postgres://notif:notifpass@localhost:5432/notifications",
-  max: 20, // max simultaneous connections
-  min: 4, // minimum idle connections
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  user: "postgres.hyuvqjcbwdsbemnnbomn",
+  password: `Omotayo_sql0308`,
+  host: "aws-1-eu-north-1.pooler.supabase.com",
+  port: 5432,
+  database: "postgres",
+  // pool_mode: "session",
 });
 
 pool.on("error", (err) => {
@@ -39,7 +48,7 @@ export const retryQuery = async (
   sql: string,
   params: any[] = [],
   retries = 3
-): Promise<any> => {
+) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await query(sql, params);

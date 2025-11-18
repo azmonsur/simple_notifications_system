@@ -3,6 +3,9 @@ import * as amqp from "amqplib";
 import type { Connection, Channel } from "amqplib";
 import { logger } from "./logger";
 
+import * as dotenv from "dotenv";
+dotenv.config();
+
 let conn: Connection | null = null;
 let channel: Channel | null = null;
 let connecting = false; // prevent multiple concurrent reconnects
@@ -26,7 +29,7 @@ const DELAYED_QUEUES: Record<string, string> = {
   email: "notifications.email.delayed",
 };
 
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://127.0.0.1:5672";
+const RABBITMQ_URL = process.env.RABBITMQ_URL as string;
 
 /**
  * Creates a new connection and channel, asserts all queues.
