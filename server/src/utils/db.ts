@@ -6,30 +6,24 @@ dotenv.config();
 
 const logger = new Logger("Postgres");
 
-// export const pool = new Pool({
-//   connectionString: process.env.POSTGRE_URL,
-//   max: 20,
-//   min: 4,
-//   idleTimeoutMillis: 30000,
-//   connectionTimeoutMillis: 5000,
-//   // ssl: true, // required for Supabase
-// });
-
-console.log("Connecting to Postgres at:", process.env.POSTGRE_HOST);
 export const pool = new Pool({
   user: "postgres.hyuvqjcbwdsbemnnbomn",
-  password: `Omotayo_sql0308`,
+  password: "Omotayo_sql0308",
   host: "aws-1-eu-north-1.pooler.supabase.com",
   port: 5432,
   database: "postgres",
-  // pool_mode: "session",
+  max: 20,
+  idleTimeoutMillis: 30000, // close idle clients after 30s
+  connectionTimeoutMillis: 5000, // fail fast if cannot connect
 });
 
+// 🔹 Handle idle client errors gracefully
 pool.on("error", (err) => {
-  logger.error("Unexpected PostgreSQL error on idle client", err);
-  process.exit(-1);
+  logger.error("Unexpected Postgres error on idle client", err);
+  // Do NOT exit the process
 });
 
+// 🔹 Basic query function with timing
 export const query = async (sql: string, params?: any[]) => {
   const start = Date.now();
   try {
@@ -43,18 +37,51 @@ export const query = async (sql: string, params?: any[]) => {
   }
 };
 
-// Retry helper
+// 🔹 Retry helper for transient errors
 export const retryQuery = async (
   sql: string,
   params: any[] = [],
-  retries = 3
+  retries = 3,
+  delayMs = 200
 ) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await query(sql, params);
-    } catch (err) {
-      if (attempt === retries) throw err;
-      await new Promise((r) => setTimeout(r, 200 * attempt));
+    } catch (err: any) {
+      const retriableErrors = [
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "ECONNREFUSED",
+        "EPIPE",
+        "ENETDOWN",
+        "Connection terminated unexpectedly",
+      ];
+
+      // Only retry if it's a transient/network error
+      if (
+        attempt < retries &&
+        (retriableErrors.some((e) => err.message.includes(e)) ||
+          err.code === "57P01") // admin shutdown
+      ) {
+        logger.warn(
+          `Transient DB error, retrying attempt ${attempt} in ${
+            delayMs * attempt
+          }ms...`
+        );
+        await new Promise((r) => setTimeout(r, delayMs * attempt));
+        continue;
+      }
+      throw err;
     }
+  }
+};
+
+// 🔹 Optional: graceful shutdown
+export const closePool = async () => {
+  try {
+    await pool.end();
+    logger.log("Postgres pool closed.");
+  } catch (err) {
+    logger.error("Error closing Postgres pool:", err);
   }
 };

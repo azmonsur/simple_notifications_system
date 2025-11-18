@@ -4,14 +4,8 @@ import { logger } from "../../utils/logger";
 import SendEmailSendGrid from "../../helpers/sendEmailSendgrid";
 import { toTitleCase } from "../../helpers/convertToTitleCase";
 import Bottleneck from "bottleneck";
-import { Pool } from "pg";
+import { query as dbQuery } from "../../utils/db";
 import { generateReceiptPDF } from "../../helpers/generateReceiptPDF";
-
-const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    "postgres://notif:notifpass@localhost:5432/notifications",
-});
 
 interface Recipient {
   role?: "sender" | "receiver";
@@ -93,7 +87,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.channel?.close) await this.channel.close();
-    await pool.end().catch(() => {});
+    // await pool.end().catch(() => {});
     logger.info("🧹 Email worker stopped.");
   }
 
@@ -169,7 +163,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
 
     const destination = job.recipient?.destination;
     if (!destination) {
-      await pool.query(
+      await dbQuery(
         "UPDATE notifications SET status=$1, last_error=$2, updated_at=now() WHERE id=$3",
         ["failed", "Missing recipient", job.notif_id]
       );
@@ -191,11 +185,11 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
 
       if (role === "sender" && status === "pending") {
         const pdfBuffer = await generateReceiptPDF({
-          transaction_id: job.template_vars.tracking_number,
+          transaction_id: job.template_vars.tracking_number as string,
           date: new Date().toISOString(),
-          center: job.post_office_center,
+          center: job.post_office_center as string,
           source: job.post_office_center,
-          sender_name: job.recipient.name,
+          sender_name: job.recipient.name as string,
           sender_email: job.recipient.destination,
           service_type: "Parcel Shipment",
           amount_paid: job.template_vars.amount || 0,
@@ -220,7 +214,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
       });
 
       if (result?.success) {
-        await pool.query(
+        await dbQuery(
           "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
           ["sent", attempts + 1, null, job.notif_id]
         );
@@ -243,7 +237,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
     msg: ConsumeMessage
   ): Promise<void> {
     if (nextAttempts > this.maxRetries) {
-      await pool.query(
+      await dbQuery(
         "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
         ["failed", nextAttempts, JSON.stringify(error), job.notif_id]
       );
@@ -255,7 +249,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
     }
 
     job.attempts = nextAttempts;
-    await pool.query(
+    await dbQuery(
       "UPDATE notifications SET attempts=$1, last_error=$2, updated_at=now() WHERE id=$3",
       [nextAttempts, JSON.stringify(error), job.notif_id]
     );

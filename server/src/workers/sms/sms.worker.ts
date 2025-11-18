@@ -1,17 +1,14 @@
 // src/workers/sms/sms.worker.service.ts
-import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
-import { logger } from "../../utils/logger";
+import { query as dbQuery } from "../../utils/db";
 import SendSMSTermii from "../../helpers/sendSMSTermii";
-import { Pool } from "pg";
 import Bottleneck from "bottleneck";
-
-// PostgreSQL connection pool
-const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    "postgres://notif:notifpass@localhost:5432/notifications",
-});
 
 // --- Interfaces ---
 interface Recipient {
@@ -60,55 +57,98 @@ interface TermiiResponse {
   [key: string]: any;
 }
 
-// --- Worker Service ---
+// --- SMS Worker Service ---
 @Injectable()
 export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger("SmsWorker");
   private readonly queueName = "notifications.sms";
   private readonly maxRetries = 3;
   private readonly maxConcurrentJobs = 5;
   private channel: ConfirmChannel | null = null;
 
-  // Bottleneck rate limiter
+  // Rate limiter
   private readonly limiter = new Bottleneck({
-    minTime: 200, // 5 requests/sec
+    minTime: 200,
     maxConcurrent: 2,
   });
 
   async onModuleInit() {
-    logger.info("🚀 Starting SMS Worker...");
-    const ch = await getChannel();
+    this.logger.log("🚀 Starting SMS Worker...");
+    this.channel = (await getChannel()) as unknown as ConfirmChannel;
 
-    if (!ch) {
-      logger.error("❌ Failed to get RabbitMQ channel.");
+    if (!this.channel) {
+      this.logger.error("❌ Failed to get RabbitMQ channel.");
       return;
     }
 
-    this.channel = ch as unknown as ConfirmChannel;
     this.channel.prefetch(this.maxConcurrentJobs);
-
     await this.channel.consume(
       this.queueName,
       (msg) => {
         if (!msg) return;
         this.limiter
-          .schedule(() => this.handleMessage(msg))
+          .schedule(() => this.processMessage(msg))
           .catch((err) => {
-            logger.error("❌ Unhandled SMS job error:", err);
-            this.channel?.nack(msg, false, true);
+            this.logger.error("❌ Unhandled SMS job error:", err);
+            this.safeNack(msg);
           });
       },
       { noAck: false }
     );
 
-    logger.info(`✅ SMS worker is consuming from queue: ${this.queueName}`);
+    this.logger.log(`✅ SMS worker consuming queue: ${this.queueName}`);
   }
 
   async onModuleDestroy() {
     if (this.channel?.close) await this.channel.close();
-    logger.info("🧹 RabbitMQ channel closed gracefully.");
+    this.logger.log("🧹 RabbitMQ channel closed gracefully.");
   }
 
-  // --- Message Formatter ---
+  // --- Core message processor ---
+  private async processMessage(msg: ConsumeMessage) {
+    if (!this.channel) return;
+
+    let job: SMSJob;
+    try {
+      job = JSON.parse(msg.content.toString());
+    } catch (err) {
+      this.logger.error("❌ Invalid JSON message:", err);
+      return this.safeAck(msg);
+    }
+
+    try {
+      this.validateJob(job);
+
+      // Time-based restriction
+      if (!this.isWithinSendWindow()) {
+        const delayMs = this.getNextSendWindowDelay();
+        this.logger.warn(
+          `⏰ Job ${job.notif_id} outside send window, delaying for ${
+            delayMs / 3600000
+          } hours`
+        );
+        await publishDeliveryDelayed(job, delayMs);
+        return this.safeAck(msg);
+      }
+
+      const smsBody = this.formatMessage(job);
+      await this.sendSMS(job, smsBody, msg);
+    } catch (err: any) {
+      this.logger.error(
+        `❌ SMS failed (notif ${job?.notif_id || "unknown"}): ${err.message}`
+      );
+      await this.handleRetry(job, msg);
+    }
+  }
+
+  // --- Validate job structure ---
+  private validateJob(job: SMSJob) {
+    if (!job.notif_id) throw new Error("Missing notif_id");
+    if (!job.recipient?.destination)
+      throw new Error("Missing recipient destination");
+  }
+
+  // --- Format SMS message ---
   private formatMessage(job: SMSJob): string {
     const { recipient, template_vars } = job;
     const role = recipient.role;
@@ -116,7 +156,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     const trackingNumber = template_vars.tracking_number || "N/A";
     const amount = template_vars.amount ?? 0;
     const customerName = recipient.name || "Customer";
-    const postOfficeCenter =
+    const postOffice =
       template_vars.post_office_center || "your nearest post office";
 
     const formattedAmount = new Intl.NumberFormat("en-NG", {
@@ -124,182 +164,130 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
       currency: "NGN",
     }).format(amount);
 
-    let textBody = "";
-
     switch (true) {
       case role === "sender" && status === "pending":
-        textBody = `Hi ${customerName}, Thank you for your shipment. Order (${trackingNumber}) estimated charges: ${formattedAmount}.`;
-        break;
-
+        return `Hi ${customerName}, Thank you for your shipment. Order (${trackingNumber}) estimated charges: ${formattedAmount}.`;
       case role === "receiver" && status === "pending":
-        textBody = `Hi ${customerName}, A shipment with tracking ID (${trackingNumber}) has been booked for you.`;
-        break;
-
+        return `Hi ${customerName}, A shipment with tracking ID (${trackingNumber}) has been booked for you.`;
       case role === "sender" && status === "dispatched":
-        textBody = `Hi ${customerName}, Your shipment (${trackingNumber}) has been dispatched.`;
-        break;
-
+        return `Hi ${customerName}, Your shipment (${trackingNumber}) has been dispatched.`;
       case role === "receiver" && status === "dispatched":
-        textBody = `Hi ${customerName}, Your shipment (${trackingNumber}) has been dispatched to ${postOfficeCenter}.`;
-        break;
-
+        return `Hi ${customerName}, Your shipment (${trackingNumber}) has been dispatched to ${postOffice}.`;
       case (role === "receiver" || role === "sender") && status === "arrived":
-        textBody = `Hi ${customerName}, Your shipment (${trackingNumber}) has arrived at ${postOfficeCenter} and is ready for collection.`;
-        break;
-
+        return `Hi ${customerName}, Your shipment (${trackingNumber}) has arrived at ${postOffice} and is ready for collection.`;
       case role === "sender" && status === "received":
-        textBody = `Hi ${customerName}, Your shipment (${trackingNumber}) has been collected.`;
-        break;
-
+        return `Hi ${customerName}, Your shipment (${trackingNumber}) has been collected.`;
       case role === "receiver" && status === "received":
-        textBody = `Hi ${customerName}, You have successfully collected your shipment (${trackingNumber}) at ${postOfficeCenter}.`;
-        break;
-
+        return `Hi ${customerName}, You have successfully collected your shipment (${trackingNumber}) at ${postOffice}.`;
       default:
-        textBody = `Hi ${customerName}, Your package ${trackingNumber} has a status update: ${status}.`;
-        break;
+        return `Hi ${customerName}, Your package ${trackingNumber} has a status update: ${status}.`;
     }
-
-    return textBody;
   }
 
-  // --- Message Handler ---
-  private async handleMessage(msg: ConsumeMessage) {
-    if (!this.channel) return;
-
-    let job: SMSJob;
-    try {
-      job = JSON.parse(msg.content.toString());
-    } catch (err) {
-      logger.error("❌ Failed to parse job:", err);
-      this.channel.nack(msg, false, false);
-      return;
-    }
-
-    const attempts = job.attempts ?? 0;
-
-    if (!job.recipient?.destination) {
-      logger.warn(
-        JSON.stringify({ notif_id: job.notif_id, reason: "Missing recipient" })
-      );
-      await pool.query(
-        "UPDATE notifications SET status=$1, last_error=$2, updated_at=now() WHERE id=$3",
-        ["failed", "Missing recipient", job.notif_id]
-      );
-      this.channel.ack(msg);
-      return;
-    }
-
-    // Time-based restriction (8 AM – 8 PM)
-    const now = new Date();
-    const hour = now.getHours();
-    const sendWindowStart = parseInt(process.env.SMS_WINDOW_START || "8");
-    const sendWindowEnd = parseInt(process.env.SMS_WINDOW_END || "20");
-
-    if (hour < sendWindowStart || hour >= sendWindowEnd) {
-      const delayHours =
-        hour >= sendWindowEnd
-          ? 24 - hour + sendWindowStart
-          : sendWindowStart - hour;
-      const delayMs = delayHours * 60 * 60 * 1000;
-
-      logger.warn(
-        JSON.stringify({
-          notif_id: job.notif_id,
-          reason: "Outside send window",
-          delayHours,
-        })
-      );
-
-      await publishDeliveryDelayed(job, delayMs);
-      this.channel.ack(msg);
-      return;
-    }
-
-    const body = this.formatMessage(job);
-    let smsResponse: TermiiResponse | null = null;
-    const nextAttempts = attempts + 1;
+  // --- Send SMS and update DB ---
+  private async sendSMS(job: SMSJob, body: string, msg: ConsumeMessage) {
+    const attempts = (job.attempts ?? 0) + 1;
 
     try {
-      logger.info("");
-      smsResponse = await SendSMSTermii({
+      const response = await SendSMSTermii({
         to: job.recipient.destination,
         body,
       });
 
-      if (smsResponse?.success) {
-        await pool.query(
+      if (response?.success) {
+        await dbQuery(
           "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["sent", nextAttempts, null, job.notif_id]
+          ["sent", attempts, null, job.notif_id]
         );
-        logger.info(JSON.stringify(smsResponse?.message));
-        this.channel.ack(msg);
-      } else {
-        await pool.query(
-          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["queued", nextAttempts, JSON.stringify(smsResponse), job.notif_id]
-        );
-        logger.warn(JSON.stringify(smsResponse?.message));
-        await this.handleRetry(job, nextAttempts, smsResponse, msg);
+        this.logger.log(`✅ SMS sent → notif ${job.notif_id}`);
+        return this.safeAck(msg);
       }
+
+      await this.handleRetry(job, msg, response, attempts);
     } catch (err) {
-      logger.error(`❌ SMS sending failed for ${job.notif_id}:`, err);
-      await this.handleRetry(job, nextAttempts, smsResponse, msg);
+      this.logger.error(`❌ SMS send error for ${job.notif_id}:`, err);
+      await this.handleRetry(job, msg, null, attempts);
     }
   }
 
-  // --- Retry Logic ---
+  // --- Retry logic ---
   private async handleRetry(
     job: SMSJob,
-    nextAttempts: number,
-    smsResponse: TermiiResponse | null,
-    msg: ConsumeMessage
+    msg: ConsumeMessage,
+    response: TermiiResponse | null = null,
+    attempts?: number
   ) {
     if (!this.channel) return;
+    const nextAttempts = attempts ?? (job.attempts ?? 0) + 1;
 
     if (nextAttempts > this.maxRetries) {
-      await pool.query(
+      await dbQuery(
         "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-        ["failed", nextAttempts, JSON.stringify(smsResponse), job.notif_id]
+        ["failed", nextAttempts, JSON.stringify(response), job.notif_id]
       );
-
-      logger.error(
-        JSON.stringify({
-          notif_id: job.notif_id,
-          reason: "Max retries reached",
-          response: smsResponse,
-        })
+      this.logger.error(
+        `❌ notif ${job.notif_id} permanently failed → max retries reached`
       );
-
-      this.channel.nack(msg, false, false);
-      return;
+      return this.safeNack(msg, false, false);
     }
 
     job.attempts = nextAttempts;
-    await pool.query(
+    await dbQuery(
       "UPDATE notifications SET attempts=$1, last_error=$2, updated_at=now() WHERE id=$3",
-      [nextAttempts, JSON.stringify(smsResponse), job.notif_id]
+      [nextAttempts, JSON.stringify(response), job.notif_id]
     );
 
-    // Progressive backoff delay schedule
     const retrySchedule = [
-      30 * 60 * 1000, // 30 mins
-      2 * 60 * 60 * 1000, // 2 hours
-      6 * 60 * 60 * 1000, // 6 hours
+      30 * 60 * 1000,
+      2 * 60 * 60 * 1000,
+      6 * 60 * 60 * 1000,
     ];
     const retryDelayMs =
       retrySchedule[Math.min(nextAttempts - 1, retrySchedule.length - 1)];
 
     await publishDeliveryDelayed(job, retryDelayMs);
-    this.channel.ack(msg);
-
-    logger.warn(
-      JSON.stringify({
-        notif_id: job.notif_id,
-        reason: "Retrying",
-        attempts: nextAttempts,
-        retryDelayMinutes: retryDelayMs / (60 * 1000),
-      })
+    this.logger.warn(
+      `⚠️ notif ${job.notif_id} scheduled for retry in ${
+        retryDelayMs / 60000
+      } mins (attempt ${nextAttempts})`
     );
+    this.safeAck(msg);
+  }
+
+  // --- Helpers: Ack/Nack ---
+  private safeAck(msg: ConsumeMessage) {
+    try {
+      this.channel?.ack(msg);
+    } catch (err) {
+      this.logger.error("Ack failed:", err);
+    }
+  }
+
+  private safeNack(
+    msg: ConsumeMessage,
+    allUpTo: boolean = false,
+    requeue: boolean = true
+  ) {
+    try {
+      this.channel?.nack(msg, allUpTo, requeue);
+    } catch (err) {
+      this.logger.error("Nack failed:", err);
+    }
+  }
+
+  // --- Helpers: Send window ---
+  private isWithinSendWindow(): boolean {
+    const nowHour = new Date().getHours();
+    const start = parseInt(process.env.SMS_WINDOW_START || "8");
+    const end = parseInt(process.env.SMS_WINDOW_END || "20");
+    return nowHour >= start && nowHour < end;
+  }
+
+  private getNextSendWindowDelay(): number {
+    const nowHour = new Date().getHours();
+    const start = parseInt(process.env.SMS_WINDOW_START || "8");
+    const end = parseInt(process.env.SMS_WINDOW_END || "20");
+    const delayHours = nowHour >= end ? 24 - nowHour + start : start - nowHour;
+    return delayHours * 60 * 60 * 1000;
   }
 }

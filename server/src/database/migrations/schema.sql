@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     attempts int DEFAULT 0,
     last_error text,
     post_office_center text,
+    attachments_meta text,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
