@@ -1,16 +1,20 @@
-# backend/Dockerfile
-FROM node:18-alpine AS build
+# Use Node.js official image
+FROM node:20-slim
+
+# Set working directory
 WORKDIR /app
+
+# Copy package.json and package-lock.json
 COPY package*.json ./
-RUN npm ci --silent
+
+# Install dependencies (production only)
+RUN npm install --production
+
+# Copy the rest of the project
 COPY . .
+
+# Build TypeScript code
 RUN npm run build
 
-FROM node:18-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=build /app/dist ./dist
-COPY package*.json ./
-RUN npm ci --production --silent
-EXPOSE 4000
-CMD ["node", "dist/main.js"]
+# Run all workers concurrently in production
+CMD ["npx", "concurrently", "-n", "SMS,EMAIL,WHATSAPP", "-c", "blue,green,magenta", "npm run start:sms-worker:prod", "npm run start:email-worker:prod", "npm run start:whatsapp-worker:prod"]

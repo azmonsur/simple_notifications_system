@@ -225,6 +225,7 @@ export class NotificationsService {
          LIMIT $2`,
         ["failed", limit]
       );
+
       return res.rows;
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);

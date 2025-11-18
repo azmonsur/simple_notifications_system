@@ -15,7 +15,8 @@
     "start:sms-worker:prod": "node dist/sms.worker.main.js",
     "start:email-worker:prod": "node dist/email.worker.main.js",
     "start:whatsapp-worker:prod": "node dist/whatsapp.worker.main.js",
-    "start:all-workers": "concurrently -n SMS,EMAIL,WHATSAPP -c blue,green,magenta \"npm run start:sms-worker\" \"npm run start:email-worker\" \"npm run start:whatsapp-worker\""
+    "start:all-workers": "concurrently -n SMS,EMAIL,WHATSAPP -c blue,green,magenta \"npm run start:sms-worker\" \"npm run start:email-worker\" \"npm run start:whatsapp-worker\"",
+    "start:all-workers:prod": "concurrently -n SMS,EMAIL,WHATSAPP -c blue,green,magenta \"npm run start:sms-worker:prod\" \"npm run start:email-worker:prod\" \"npm run start:whatsapp-worker:prod\""
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
