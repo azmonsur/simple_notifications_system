@@ -7,15 +7,22 @@ dotenv.config();
 const logger = new Logger("Postgres");
 
 export const pool = new Pool({
-  user: "postgres.hyuvqjcbwdsbemnnbomn",
-  password: "Omotayo_sql0308",
-  host: "aws-1-eu-north-1.pooler.supabase.com",
-  port: 5432,
-  database: "postgres",
+  connectionString: process.env.POSTGRE_URL,
   max: 20,
   idleTimeoutMillis: 30000, // close idle clients after 30s
   connectionTimeoutMillis: 5000, // fail fast if cannot connect
 });
+
+// export const pool = new Pool({
+//   user: "postgres.hyuvqjcbwdsbemnnbomn",
+//   password: "Omotayo_sql0308",
+//   host: "aws-1-eu-north-1.pooler.supabase.com",
+//   port: 5432,
+//   database: "postgres",
+//   max: 20,
+//   idleTimeoutMillis: 30000, // close idle clients after 30s
+//   connectionTimeoutMillis: 5000, // fail fast if cannot connect
+// });
 
 // 🔹 Handle idle client errors gracefully
 pool.on("error", (err) => {
