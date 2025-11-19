@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../utils/auth";
 
@@ -24,6 +24,26 @@ const NavItem = ({
 export default function Sidebar() {
   const auth = useAuth();
   const navigate = useNavigate();
+
+  const { token, logout } = auth;
+  useEffect(() => {
+    if (!token) return;
+
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const expiry = payload.exp * 1000;
+    const timeout = expiry - Date.now();
+
+    if (timeout <= 0) {
+      logout();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      logout();
+    }, timeout);
+
+    return () => clearTimeout(timer);
+  }, [token]);
 
   return (
     <aside className="w-72 bg-white border-r p-6 flex flex-col">

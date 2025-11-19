@@ -1,6 +1,5 @@
 // src/analytics/analytics.service.ts
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
-import { Pool } from "pg";
 import { query as dbQuery } from "../../utils/db";
 
 @Injectable()

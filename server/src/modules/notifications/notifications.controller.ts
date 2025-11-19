@@ -5,7 +5,6 @@ import {
   Get,
   Query,
   Req,
-  Res,
   Param,
   UseGuards,
 } from "@nestjs/common";
@@ -36,16 +35,15 @@ export class NotificationsController {
   @Throttle({ default: { limit: 10, ttl: 60 } }) // max 10 requests per IP per 60 seconds
   @Get("admin/notifications/failed")
   async listFailed(@Query("limit") limit?: string) {
-    console.log(limit);
     return { data: await this.svc.listFailed(limit ? parseInt(limit) : 100) };
   }
 
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @Throttle({ default: { limit: 10, ttl: 60 } }) // max 10 requests per IP per 60 seconds
   @Post("admin/notifications/:id/retry")
   async retry(@Param("id") id: string) {
     await this.svc.markQueued(id);
-    return { status: "queued" };
+    return { status: "Message queued" };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -53,6 +51,6 @@ export class NotificationsController {
   @Post("admin/notifications/:id/resolve")
   async resolve(@Param("id") id: string) {
     await this.svc.markResolved(id);
-    return { status: "resolved" };
+    return { status: "Message resolved" };
   }
 }
