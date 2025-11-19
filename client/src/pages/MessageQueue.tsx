@@ -21,48 +21,60 @@ ChartJS.register(
   Legend
 );
 
+interface ChannelStat {
+  channel: string;
+  sent: number;
+  queued: number;
+  failed: number;
+  total: number;
+}
+
 export default function MessageQueue() {
-  const [channelStats, setChannelStats] = useState([]);
+  const [channelStats, setChannelStats] = useState<ChannelStat[]>([]);
   const [filterChannel, setFilterChannel] = useState("all");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api
-      .get("/analytics/notifications/channel-status")
-      .then((r) => setChannelStats(r.data.data || []))
-      .catch((err) => console.error("Error fetching analytics:", err));
+    const fetchStats = async () => {
+      setLoading(true);
+      try {
+        const res = await api.get("/analytics/notifications/channel-status");
+        setChannelStats(res.data.data || []);
+      } catch (err) {
+        console.error("Error fetching analytics:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
   }, []);
 
-  const filtered =
+  const filteredStats =
     filterChannel === "all"
       ? channelStats
-      : channelStats.filter((c: any) => c.channel === filterChannel);
-
-  // Chart.js data
-  const chartLabels = filtered.map((row: any) => row.channel);
-  const sentData = filtered.map((row: any) => row.sent || 0);
-  const queuedData = filtered.map((row: any) => row.queued || 0);
-  const failedData = filtered.map((row: any) => row.failed || 0);
+      : channelStats.filter((c) => c.channel === filterChannel);
 
   const chartData = {
-    labels: chartLabels,
+    labels: filteredStats.map((row) => row.channel),
     datasets: [
       {
         label: "Sent",
-        data: sentData,
+        data: filteredStats.map((row) => row.sent || 0),
         backgroundColor: "rgba(34, 197, 94, 0.8)",
         stack: "combined",
         borderRadius: 6,
       },
       {
         label: "Queued",
-        data: queuedData,
+        data: filteredStats.map((row) => row.queued || 0),
         backgroundColor: "rgba(250, 204, 21, 0.8)",
         stack: "combined",
         borderRadius: 6,
       },
       {
         label: "Failed",
-        data: failedData,
+        data: filteredStats.map((row) => row.failed || 0),
         backgroundColor: "rgba(239, 68, 68, 0.8)",
         stack: "combined",
         borderRadius: 6,
@@ -86,11 +98,7 @@ export default function MessageQueue() {
       },
     },
     scales: {
-      x: {
-        stacked: true,
-        ticks: { color: "#555" },
-        grid: { display: false },
-      },
+      x: { stacked: true, ticks: { color: "#555" }, grid: { display: false } },
       y: {
         stacked: true,
         beginAtZero: true,
@@ -102,18 +110,18 @@ export default function MessageQueue() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
+      {/* Header and filter */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h2 className="text-2xl font-semibold">Message Queue Analytics</h2>
-        <div>
-          <label className="text-sm mr-2">Channel</label>
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Channel:</label>
           <select
             value={filterChannel}
             onChange={(e) => setFilterChannel(e.target.value)}
             className="border px-3 py-1.5 rounded-md shadow-sm focus:outline-none focus:ring focus:ring-blue-300"
           >
             <option value="all">All</option>
-            {channelStats.map((ch: any) => (
+            {channelStats.map((ch) => (
               <option key={ch.channel} value={ch.channel}>
                 {ch.channel}
               </option>
@@ -122,47 +130,53 @@ export default function MessageQueue() {
         </div>
       </div>
 
-      {/* Table with entry animation */}
+      {/* Table */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
         className="overflow-x-auto"
       >
-        <table className="min-w-full bg-white border rounded-lg shadow-lg">
-          <thead>
-            <tr className="bg-gray-100 text-left">
-              <th className="px-4 py-2 border">Channel</th>
-              <th className="px-4 py-2 border text-green-700">Sent</th>
-              <th className="px-4 py-2 border text-yellow-600">Queued</th>
-              <th className="px-4 py-2 border text-red-600">Failed</th>
-              <th className="px-4 py-2 border">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((row: any) => (
-              <tr key={row.channel} className="hover:bg-gray-50">
-                <td className="px-4 py-2 border font-medium">{row.channel}</td>
-                <td className="px-4 py-2 border">{row.sent || 0}</td>
-                <td className="px-4 py-2 border">{row.queued || 0}</td>
-                <td className="px-4 py-2 border">{row.failed || 0}</td>
-                <td className="px-4 py-2 border font-semibold">
-                  {row.total || 0}
-                </td>
+        {loading ? (
+          <div className="text-center py-6 text-gray-500">Loading...</div>
+        ) : (
+          <table className="min-w-full bg-white border rounded-lg shadow-lg">
+            <thead>
+              <tr className="bg-gray-100 text-left">
+                <th className="px-4 py-2 border">Channel</th>
+                <th className="px-4 py-2 border text-green-700">Sent</th>
+                <th className="px-4 py-2 border text-yellow-600">Queued</th>
+                <th className="px-4 py-2 border text-red-600">Failed</th>
+                <th className="px-4 py-2 border">Total</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredStats.map((row) => (
+                <tr key={row.channel} className="hover:bg-gray-50">
+                  <td className="px-4 py-2 border font-medium">
+                    {row.channel}
+                  </td>
+                  <td className="px-4 py-2 border">{row.sent || 0}</td>
+                  <td className="px-4 py-2 border">{row.queued || 0}</td>
+                  <td className="px-4 py-2 border">{row.failed || 0}</td>
+                  <td className="px-4 py-2 border font-semibold">
+                    {row.total || 0}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </motion.div>
 
-      {/* Chart with smooth animation */}
+      {/* Chart */}
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, delay: 0.3 }}
         className="bg-white p-6 rounded-lg shadow-lg h-[400px]"
       >
-        <Bar options={chartOptions} data={chartData} />
+        <Bar data={chartData} options={chartOptions} />
       </motion.div>
     </div>
   );

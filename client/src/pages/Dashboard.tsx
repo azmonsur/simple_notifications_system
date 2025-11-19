@@ -17,6 +17,7 @@ import {
 } from "chart.js";
 import { Line, Bar, Doughnut } from "react-chartjs-2";
 import { motion } from "framer-motion";
+import Sidebar from "../components/Sidebar";
 
 ChartJS.register(
   CategoryScale,
@@ -32,9 +33,7 @@ ChartJS.register(
   TimeScale
 );
 
-/* ============================
-   Simple CountUp hook (no deps)
-   ============================ */
+// Animated CountUp Hook
 function useCountUp(value: number | string | undefined, duration = 900) {
   const [display, setDisplay] = useState<number>(0);
   const rafRef = useRef<number | null>(null);
@@ -51,7 +50,7 @@ function useCountUp(value: number | string | undefined, duration = 900) {
 
     const tick = (now: number) => {
       const t = Math.min(1, (now - startTime) / duration);
-      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      const eased = 1 - Math.pow(1 - t, 3);
       const curr = Math.round(from + (target - from) * eased);
       setDisplay(curr);
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
@@ -66,61 +65,31 @@ function useCountUp(value: number | string | undefined, duration = 900) {
   return display;
 }
 
+// Get current month
 function getMonthName() {
-  const date: number = new Date().getMonth();
-
-  const monthName =
-    date === 0
-      ? "Jan"
-      : date === 1
-      ? "Feb"
-      : date === 2
-      ? "Mar"
-      : date === 3
-      ? "Apr"
-      : date === 4
-      ? "May"
-      : date === 5
-      ? "Jun"
-      : date === 6
-      ? "Jul"
-      : date === 7
-      ? "Aug"
-      : date === 8
-      ? "Sep"
-      : date === 9
-      ? "Oct"
-      : date === 10
-      ? "Nov"
-      : "Dec";
-
-  return monthName;
+  return new Date().toLocaleString("default", { month: "short" });
 }
 
-/* ============================
-   Dashboard Component
-   ============================ */
 export default function Dashboard(): JSX.Element {
-  // raw data
+  // Data states
   const [summary, setSummary] = useState<any[]>([]);
   const [sentThisMonth, setSentThisMonth] = useState<any[]>([]);
   const [byChannel, setByChannel] = useState<any[]>([]);
   const [byChannelStatus, setByChannelStatus] = useState<any[]>([]);
   const [parcelsByStatus, setParcelsByStatus] = useState<any[]>([]);
   const [recipientRole, setRecipientRole] = useState<any[]>([]);
-  const [avgDuration, setAvgDuration] = useState<any>({});
   const [avgNotifPerParcel, setAvgNotifPerParcel] = useState<any>({});
   const [totalParcels, setTotalParcels] = useState<any>({});
   const [transitions, setTransitions] = useState<any[]>([]);
   const [trendData, setTrendData] = useState<any>({ labels: [], datasets: [] });
 
-  // ui
+  // UI state
   const [darkMode, setDarkMode] = useState<boolean>(
     localStorage.getItem("theme") === "dark" ||
       window.matchMedia("(prefers-color-scheme: dark)").matches
   );
 
-  // apply theme on mount & toggle
+  // Apply theme
   useEffect(() => {
     const root = document.documentElement;
     if (darkMode) {
@@ -132,7 +101,7 @@ export default function Dashboard(): JSX.Element {
     }
   }, [darkMode]);
 
-  // fetch all analytics (including your channel-status endpoint)
+  // Fetch analytics
   useEffect(() => {
     const fetchAll = async () => {
       try {
@@ -143,7 +112,6 @@ export default function Dashboard(): JSX.Element {
           channelStatusRes,
           parcelsRes,
           recipientRes,
-          avgDurRes,
           avgNotifRes,
           totalParcelsRes,
           transitionsRes,
@@ -154,7 +122,6 @@ export default function Dashboard(): JSX.Element {
           api.get("/analytics/notifications/channel-status-dash"),
           api.get("/analytics/parcels/status"),
           api.get("/analytics/notifications/recipient-role"),
-          api.get("/analytics/parcels/average-duration"),
           api.get("/analytics/notifications/avg-per-parcel"),
           api.get("/analytics/parcels/total"),
           api.get("/analytics/parcels/transitions"),
@@ -172,8 +139,6 @@ export default function Dashboard(): JSX.Element {
           setParcelsByStatus(parcelsRes.value.data.data || []);
         if (recipientRes.status === "fulfilled")
           setRecipientRole(recipientRes.value.data.data || []);
-        if (avgDurRes.status === "fulfilled")
-          setAvgDuration(avgDurRes.value.data.data || {});
         if (avgNotifRes.status === "fulfilled")
           setAvgNotifPerParcel(avgNotifRes.value.data.data || {});
         if (totalParcelsRes.status === "fulfilled")
@@ -187,7 +152,7 @@ export default function Dashboard(): JSX.Element {
 
     fetchAll();
 
-    // demo trend (replace with real timeseries API if available)
+    // Demo trend
     const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     setTrendData({
       labels,
@@ -202,15 +167,13 @@ export default function Dashboard(): JSX.Element {
     });
   }, []);
 
-  // derived totals (summary)
+  // Derived totals
   const totalSent = summary.find((s) => s.status === "sent")?.total || 0;
   const totalFailed = summary.find((s) => s.status === "failed")?.total || 0;
   const totalQueued = summary.find((s) => s.status === "queued")?.total || 0;
+  const totalSentThisMonth = parseInt(sentThisMonth[0]?.sent_this_month || "0");
 
-  // sent this month sentThisMonth
-  const totalSentThisMonth = parseInt(sentThisMonth[0]?.sent_this_month);
-
-  // animated counters
+  // Animated counts
   const sentCount = useCountUp(totalSent);
   const failedCount = useCountUp(totalFailed);
   const queuedCount = useCountUp(totalQueued);
@@ -219,7 +182,7 @@ export default function Dashboard(): JSX.Element {
     Number(avgNotifPerParcel.avg_notif_per_parcel) || 0
   );
 
-  // adaptive colors & small theme helpers
+  // Colors
   const colors = useMemo(
     () => ({
       sent: darkMode ? "rgba(34,197,94,0.95)" : "rgba(34,197,94,0.7)",
@@ -235,45 +198,31 @@ export default function Dashboard(): JSX.Element {
     [darkMode]
   );
 
-  /* ===========================
-     Prepare stacked bar data
-     expects byChannelStatus = [{ channel, status, total }, ...]
-     =========================== */
+  // Stacked bar data
   const stackedDataWithColors = useMemo(() => {
-    if (!byChannelStatus || byChannelStatus.length === 0) {
-      // fallback: if only `byChannel` exists, synthesize a simple stacked dataset
-      if (byChannel && byChannel.length) {
+    if (!byChannelStatus?.length) {
+      if (byChannel?.length) {
         const labels = byChannel.map((c) => c.channel);
-        const synthSent = byChannel.map((c) =>
-          Math.round((c.total || 0) * 0.8)
-        );
-        const synthQueued = byChannel.map((c) =>
-          Math.round((c.total || 0) * 0.15)
-        );
-        const synthFailed = byChannel.map((c) =>
-          Math.round((c.total || 0) * 0.05)
-        );
-
         return {
           labels,
           datasets: [
             {
               label: "Sent",
-              data: synthSent,
+              data: byChannel.map((c) => Math.round(c.total * 0.8)),
               backgroundColor: colors.sent,
               stack: "s1",
               borderRadius: 6,
             },
             {
               label: "Queued",
-              data: synthQueued,
+              data: byChannel.map((c) => Math.round(c.total * 0.15)),
               backgroundColor: colors.queued,
               stack: "s1",
               borderRadius: 6,
             },
             {
               label: "Failed",
-              data: synthFailed,
+              data: byChannel.map((c) => Math.round(c.total * 0.05)),
               backgroundColor: colors.failed,
               stack: "s1",
               borderRadius: 6,
@@ -284,52 +233,31 @@ export default function Dashboard(): JSX.Element {
       return { labels: [], datasets: [] };
     }
 
-    // build labels (channels) and statuses dynamically
-    const channels = Array.from(
-      new Set(byChannelStatus.map((r: any) => r.channel))
-    );
-    const statuses = Array.from(
-      new Set(byChannelStatus.map((r: any) => r.status))
-    );
-
-    // map a color per status (use default mapping for common statuses)
+    const channels = Array.from(new Set(byChannelStatus.map((r) => r.channel)));
+    const statuses = Array.from(new Set(byChannelStatus.map((r) => r.status)));
     const defaultStatusColor: Record<string, string> = {
       sent: colors.sent,
       queued: colors.queued,
       failed: colors.failed,
     };
-    const palette = [
-      "#3B82F6",
-      "#10B981",
-      "#F59E0B",
-      "#EF4444",
-      "#8B5CF6",
-      "#6366F1",
-      "#14B8A6",
-      "#FB7185",
-    ];
-
+    const palette = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
     const statusColors: Record<string, string> = {};
-    statuses.forEach((s: string, idx: number) => {
-      statusColors[s] = defaultStatusColor[s] || palette[idx % palette.length];
-    });
-
-    const datasets = statuses.map((st) => {
-      const data = channels.map((ch) => {
-        const r = byChannelStatus.find(
-          (row: any) => row.channel === ch && row.status === st
-        );
-        return r ? r.total : 0;
-      });
-      return {
-        label: st,
-        data,
-        backgroundColor: statusColors[st],
-        stack: "s1",
-        borderRadius: 6,
-      };
-    });
-
+    statuses.forEach(
+      (s, idx) =>
+        (statusColors[s] =
+          defaultStatusColor[s] || palette[idx % palette.length])
+    );
+    const datasets = statuses.map((st) => ({
+      label: st,
+      data: channels.map(
+        (ch) =>
+          byChannelStatus.find((r) => r.channel === ch && r.status === st)
+            ?.total || 0
+      ),
+      backgroundColor: statusColors[st],
+      stack: "s1",
+      borderRadius: 6,
+    }));
     return { labels: channels, datasets };
   }, [byChannelStatus, byChannel, colors]);
 
@@ -337,7 +265,7 @@ export default function Dashboard(): JSX.Element {
     () => ({
       responsive: true,
       plugins: {
-        legend: { position: "right" as const, labels: { color: colors.text } },
+        legend: { position: "right", labels: { color: colors.text } },
         title: {
           display: true,
           text: "Notifications by Channel & Status (stacked)",
@@ -361,9 +289,7 @@ export default function Dashboard(): JSX.Element {
     [colors]
   );
 
-  /* ===========================
-     Donut / other charts
-     =========================== */
+  // Donut chart
   const donutData = useMemo(
     () => ({
       labels: ["Sent", "Failed", "Queued"],
@@ -378,427 +304,124 @@ export default function Dashboard(): JSX.Element {
     [totalSent, totalFailed, totalQueued, colors]
   );
 
-  const channelLine = useMemo(
-    () => ({
-      labels: byChannel.map((c) => c.channel),
-      datasets: [
-        {
-          label: "Notifications",
-          data: byChannel.map((c) => c.total),
-          borderColor: colors.primary,
-          backgroundColor: darkMode
-            ? "rgba(96,165,250,0.12)"
-            : "rgba(59,130,246,0.12)",
-          fill: true,
-          tension: 0.35,
-        },
-      ],
-    }),
-    [byChannel, colors, darkMode]
-  );
-
-  const parcelTrend = useMemo(
-    () => ({
-      labels: trendData.labels,
-      datasets: [
-        {
-          ...trendData.datasets[0],
-          borderColor: darkMode ? "#60A5FA" : "#3B82F6",
-          backgroundColor: darkMode
-            ? "rgba(96,165,250,0.12)"
-            : "rgba(59,130,246,0.12)",
-          fill: true,
-          tension: 0.35,
-        },
-      ],
-    }),
-    [trendData, darkMode]
-  );
-
-  const statusBar = useMemo(
-    () => ({
-      labels: parcelsByStatus.map((p) => p.new_status),
-      datasets: [
-        {
-          label: "Parcels",
-          data: parcelsByStatus.map((p) => p.total),
-          backgroundColor: darkMode
-            ? "rgba(34,197,94,0.6)"
-            : "rgba(20, 169, 55, 0.35)",
-        },
-      ],
-    }),
-    [parcelsByStatus, darkMode]
-  );
-
-  const roleDonut = useMemo(
-    () => ({
-      labels: recipientRole.map((r) => r.recipient_role),
-      datasets: [
-        {
-          data: recipientRole.map((r) => r.total),
-          backgroundColor: [
-            "#3B82F6",
-            "#10B981",
-            "#F59E0B",
-            "#EF4444",
-            "#8B5CF6",
-          ],
-        },
-      ],
-    }),
-    [recipientRole]
-  );
-
-  const transitionsBar = useMemo(
-    () => ({
-      labels: transitions.map((t) => t.new_status),
-      datasets: [
-        {
-          label: "Transitions",
-          data: transitions.map((t) => t.transitions),
-          backgroundColor: darkMode
-            ? "rgba(239,68,68,0.6)"
-            : "rgba(239,68,68,0.7)",
-        },
-      ],
-    }),
-    [transitions, darkMode]
-  );
-
-  /* ===========================
-     Framer Motion variants
-     =========================== */
   const fadeInUp = {
     hidden: { opacity: 0, y: 28 },
     show: { opacity: 1, y: 0, transition: { duration: 0.6 } },
   };
 
-  /* ===========================
-     Render
-     =========================== */
   return (
-    <div className={`p-6 min-h-screen ${colors.pageBgClass} transition-colors`}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1
-            className={`text-3xl font-bold ${
-              darkMode ? "text-white" : "text-gray-800"
-            }`}
-          >
+    <div className="flex min-h-screen">
+      {/* Sidebar */}
+      {/* <Sidebar /> */}
+
+      {/* Main Content */}
+      <main className="flex-1 p-6 overflow-auto transition-colors bg-gray-50 dark:bg-gray-900">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
             📊 Analytics Dashboard
           </h1>
-          <div className="text-sm text-gray-400">
-            Realtime overview • interactive charts
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div
-              className={`text-xs ${
-                darkMode ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Theme
-            </div>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className={`mt-1 px-3 py-1 rounded-md font-medium ${
-                darkMode
-                  ? "bg-gray-700 text-gray-200"
-                  : "bg-gray-200 text-gray-800"
-              }`}
-            >
-              {darkMode ? "☀ Light" : "🌙 Dark"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Top metrics */}
-      <motion.section
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8"
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.2 }}
-        variants={fadeInUp}
-      >
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
-        >
-          <div className="text-sm text-gray-400">Total Sent</div>
-          <div className="text-3xl font-bold text-green-500">{sentCount}</div>
-          <div className="text-xs text-gray-400 mt-2">
-            Successful deliveries
-          </div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded`}
-        >
-          <div className="text-sm text-gray-400">
-            Total Sent ( {getMonthName()})
-          </div>
-          <div className="text-3xl font-bold text-brown-500">
-            {totalSentThisMonth ? totalSentThisMonth : 0}
-          </div>
-          <div className="text-xs text-gray-400 mt-2">
-            Total sent this month
-          </div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
-        >
-          <div className="text-sm text-gray-400">Total Failed</div>
-          <div className="text-3xl font-bold text-red-500">{failedCount}</div>
-          <div className="text-xs text-gray-400 mt-2">Failed deliveries</div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
-        >
-          <div className="text-sm text-gray-400">Total Queued</div>
-          <div className="text-3xl font-bold text-yellow-500">
-            {queuedCount}
-          </div>
-          <div className="text-xs text-gray-400 mt-2">Waiting to be sent</div>
-        </motion.div>
-
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
-        >
-          <div className="text-sm text-gray-400">Total Parcels</div>
-          <div className="text-3xl font-bold text-indigo-400">
-            {parcelsCount}
-          </div>
-          <div className="text-xs text-gray-400 mt-2">
-            Total parcels handled
-          </div>
-        </motion.div>
-      </motion.section>
-
-      {/* Donut + Stacked */}
-      <motion.section
-        className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.2 }}
-        variants={fadeInUp}
-      >
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl`}
-        >
-          <h3
-            className={`font-semibold mb-3 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="px-3 py-1 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
           >
-            Delivery Breakdown
-          </h3>
-          <div className="flex items-center gap-6">
-            <div style={{ width: 160, height: 160 }}>
-              <Doughnut data={donutData as any} />
-            </div>
+            {darkMode ? "☀ Light" : "🌙 Dark"}
+          </button>
+        </div>
 
-            <div>
-              <div className="text-lg font-semibold">{`${(
-                (totalSent / Math.max(1, totalSent + totalFailed)) *
-                100
-              ).toFixed(1)}%`}</div>
-              <div className="text-sm text-gray-400 mt-1">Delivery success</div>
+        {/* Top metrics */}
+        <motion.section
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={fadeInUp}
+        >
+          {[
+            {
+              label: "Total Sent",
+              value: sentCount,
+              color: "text-green-500",
+              subtitle: "Successful deliveries",
+            },
+            {
+              label: `Total Sent (${getMonthName()})`,
+              value: totalSentThisMonth,
+              color: "text-orange-500",
+              subtitle: "This month",
+            },
+            {
+              label: "Total Failed",
+              value: failedCount,
+              color: "text-red-500",
+              subtitle: "Failed deliveries",
+            },
+            {
+              label: "Total Queued",
+              value: queuedCount,
+              color: "text-yellow-500",
+              subtitle: "Waiting to be sent",
+            },
+            {
+              label: "Total Parcels",
+              value: parcelsCount,
+              color: "text-indigo-400",
+              subtitle: "Handled parcels",
+            },
+          ].map((card) => (
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              className={`${colors.cardBgClass} ${colors.shadowClass} p-4 rounded-2xl`}
+              key={card.label}
+            >
+              <div className="text-sm text-gray-400">{card.label}</div>
+              <div className={`text-3xl font-bold ${card.color}`}>
+                {Number(card.value).toLocaleString()}
+              </div>
+              <div className="text-xs text-gray-400 mt-2">{card.subtitle}</div>
+            </motion.div>
+          ))}
+        </motion.section>
 
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-400">Sent</div>
-                  <div className="font-medium text-green-500">{totalSent}</div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-400">Queued</div>
-                  <div className="font-medium text-yellow-500">
-                    {totalQueued}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-400">Failed</div>
-                  <div className="font-medium text-red-500">{totalFailed}</div>
-                </div>
+        {/* Charts */}
+        <motion.section
+          className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={fadeInUp}
+        >
+          <div
+            className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl`}
+          >
+            <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
+              Delivery Breakdown
+            </h3>
+            <div className="flex items-center gap-6">
+              <div style={{ width: 160, height: 160 }}>
+                <Doughnut data={donutData as any} />
               </div>
             </div>
           </div>
-        </div>
-
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl lg:col-span-2`}
-        >
-          <h3
-            className={`font-semibold mb-3 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
+          <div
+            className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl lg:col-span-2`}
           >
-            Notifications by Channel & Status
-          </h3>
-
-          {/* If no labels, show friendly fallback */}
-          {!stackedDataWithColors.labels ||
-          stackedDataWithColors.labels.length === 0 ? (
-            <div className="p-6 text-center text-sm text-gray-400">
-              No channel-status breakdown available yet. The chart will appear
-              when the API returns data.
-            </div>
-          ) : (
-            <div style={{ height: 320 }}>
+            <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
+              Channel & Status
+            </h3>
+            {stackedDataWithColors.labels.length ? (
               <Bar
                 data={stackedDataWithColors as any}
                 options={stackedOptions}
               />
-            </div>
-          )}
-        </div>
-      </motion.section>
-
-      {/* Channel + Parcels + Roles */}
-      <motion.section
-        className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.2 }}
-        variants={fadeInUp}
-      >
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl`}
-        >
-          <h4
-            className={`font-semibold mb-3 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
-          >
-            Notifications by Channel
-          </h4>
-          <div style={{ height: 180 }}>
-            <Line data={channelLine as any} />
+            ) : (
+              <div className="text-center text-gray-400 py-12">
+                No data available
+              </div>
+            )}
           </div>
-        </div>
-
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl`}
-        >
-          <h4
-            className={`font-semibold mb-3 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
-          >
-            Parcels by Status
-          </h4>
-          <div style={{ height: 180 }}>
-            <Bar data={statusBar as any} />
-          </div>
-        </div>
-
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl`}
-        >
-          <h4
-            className={`font-semibold mb-3 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
-          >
-            Notifications by Recipient Role
-          </h4>
-          <div style={{ height: 180 }}>
-            <Doughnut data={roleDonut as any} />
-          </div>
-        </div>
-      </motion.section>
-
-      {/* Parcel trend + transitions */}
-      <motion.section
-        className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8"
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.2 }}
-        variants={fadeInUp}
-      >
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl`}
-        >
-          <h4
-            className={`font-semibold mb-3 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
-          >
-            Parcel Volume Over Time
-          </h4>
-          <div style={{ height: 280 }}>
-            <Line data={parcelTrend as any} />
-          </div>
-        </div>
-
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-5 rounded-2xl`}
-        >
-          <h4
-            className={`font-semibold mb-3 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
-          >
-            Parcel Status Transitions
-          </h4>
-          <div style={{ height: 280 }}>
-            <Bar data={transitionsBar as any} options={{ indexAxis: "y" }} />
-          </div>
-        </div>
-      </motion.section>
-
-      {/* Footer metrics */}
-      <motion.section
-        className="grid grid-cols-1 sm:grid-cols-2 gap-6"
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.2 }}
-        variants={fadeInUp}
-      >
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-6 rounded-2xl`}
-        >
-          <h4
-            className={`font-semibold mb-2 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
-          >
-            Average Notifications / Parcel
-          </h4>
-          <div className="text-3xl font-bold text-indigo-400">{avgNotif}</div>
-          <div className="text-sm text-gray-400 mt-2">
-            Average notifications generated per parcel
-          </div>
-        </div>
-
-        <div
-          className={`${colors.cardBgClass} ${colors.shadowClass} p-6 rounded-2xl text-center`}
-        >
-          <h4
-            className={`font-semibold mb-2 ${
-              darkMode ? "text-gray-200" : "text-gray-700"
-            }`}
-          >
-            Average Parcel Duration (hours)
-          </h4>
-          <div className="text-3xl font-bold text-rose-400">
-            {avgDuration?.avg_hours_per_parcel ?? "N/A"}
-          </div>
-          <div className="text-sm text-gray-400 mt-2">
-            Average time from first to last status
-          </div>
-        </div>
-      </motion.section>
+        </motion.section>
+      </main>
     </div>
   );
 }
