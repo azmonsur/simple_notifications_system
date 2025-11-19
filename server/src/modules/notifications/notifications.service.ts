@@ -1,5 +1,12 @@
 // src/notifications/notifications.service.ts
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import {
+  Injectable,
+  InternalServerErrorException,
+  ConflictException,
+  HttpException,
+  NotFoundException,
+} from "@nestjs/common";
+
 import { QueryResult, PoolClient } from "pg";
 import { encryptDestination } from "./utils/crypto";
 import { publishDelivery } from "../../utils/rabbitmq";
@@ -34,7 +41,11 @@ export class NotificationsService {
   /**
    * Create or update parcels and generate notifications
    */
-  async createFromEvent(event: CreateNotificationDto, ip: string) {
+  async createFromEvent(
+    event: CreateNotificationDto,
+
+    ip: string
+  ) {
     if (!event?.payload) {
       logger.error("❌ Invalid event: missing payload");
       throw new InternalServerErrorException("Missing event payload");
@@ -105,7 +116,10 @@ export class NotificationsService {
           console.log(
             `ℹ️ Status "${parcel_status}" already exists for parcel ${tracking_number}. Skipping history & notifications.`
           );
-          return;
+
+          throw new ConflictException({
+            message: `Parcel already has status '${parcel_status}'`,
+          });
         }
 
         const last_status = existingStatuses[0] ?? null;
@@ -203,11 +217,15 @@ export class NotificationsService {
               created_at: new Date().toISOString(),
             });
 
-            console.log(`✅ Notification created & published: ${notif.id}`);
+            logger.info(`✅ Notification created & published: ${notif.id}`);
           }
         }
       });
     } catch (err: unknown) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error(`❌ createFromEvent failed: ${errMsg}`);
       throw new InternalServerErrorException("Event processing failed");
@@ -246,7 +264,9 @@ export class NotificationsService {
         const notif = res.rows[0];
         if (!notif) {
           logger.error(`⚠️ Notification ${id} not found or not failed`);
-          return;
+          throw new NotFoundException({
+            message: `Notification ${id} not found or not failed`,
+          });
         }
 
         // 2️⃣ Update DB to queued
@@ -304,6 +324,10 @@ export class NotificationsService {
         await connection.close();
       });
     } catch (err: unknown) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error(`❌ markQueued failed for ${id}: ${errMsg}`);
       // fallback: mark as failed again

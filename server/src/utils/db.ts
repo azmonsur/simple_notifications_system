@@ -6,11 +6,16 @@ dotenv.config();
 
 const logger = new Logger("Postgres");
 
+const POSTGRE_URL =
+  process.env.NODE_ENV === "production"
+    ? (process.env.POSTGRE_URL_PROD as string)
+    : (process.env.POSTGRE_URL_DEV as string);
+
 export const pool = new Pool({
-  connectionString: process.env.POSTGRE_URL,
+  connectionString: POSTGRE_URL,
   max: 20,
-  idleTimeoutMillis: 30000, // close idle clients after 30s
-  connectionTimeoutMillis: 5000, // fail fast if cannot connect
+  idleTimeoutMillis: 15000, // close idle clients after 15s
+  connectionTimeoutMillis: 5000,
 });
 
 // export const pool = new Pool({
@@ -24,13 +29,20 @@ export const pool = new Pool({
 //   connectionTimeoutMillis: 5000, // fail fast if cannot connect
 // });
 
-// 🔹 Handle idle client errors gracefully
 pool.on("error", (err) => {
   logger.error("Unexpected Postgres error on idle client", err);
-  // Do NOT exit the process
 });
 
-// 🔹 Basic query function with timing
+// Keep-alive ping
+setInterval(async () => {
+  try {
+    await pool.query("SELECT 1");
+    logger.debug("Postgres keep-alive ping succeeded");
+  } catch (err) {
+    logger.warn("Postgres keep-alive ping failed", err);
+  }
+}, 250000);
+
 export const query = async (sql: string, params?: any[]) => {
   const start = Date.now();
   try {
@@ -44,11 +56,10 @@ export const query = async (sql: string, params?: any[]) => {
   }
 };
 
-// 🔹 Retry helper for transient errors
 export const retryQuery = async (
   sql: string,
   params: any[] = [],
-  retries = 3,
+  retries = 5,
   delayMs = 200
 ) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -62,13 +73,14 @@ export const retryQuery = async (
         "EPIPE",
         "ENETDOWN",
         "Connection terminated unexpectedly",
+        "db_termination",
+        "57P01", // admin shutdown
       ];
 
-      // Only retry if it's a transient/network error
       if (
         attempt < retries &&
         (retriableErrors.some((e) => err.message.includes(e)) ||
-          err.code === "57P01") // admin shutdown
+          retriableErrors.includes(err.code))
       ) {
         logger.warn(
           `Transient DB error, retrying attempt ${attempt} in ${
@@ -83,7 +95,6 @@ export const retryQuery = async (
   }
 };
 
-// 🔹 Optional: graceful shutdown
 export const closePool = async () => {
   try {
     await pool.end();

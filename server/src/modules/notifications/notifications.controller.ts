@@ -5,10 +5,11 @@ import {
   Get,
   Query,
   Req,
+  Res,
   Param,
   UseGuards,
 } from "@nestjs/common";
-import { Request } from "express";
+import { Request, Response } from "express";
 import { NotificationsService } from "./notifications.service";
 import { CreateNotificationDto } from "./dto/notifications.dto";
 
@@ -24,7 +25,11 @@ export class NotificationsController {
   async webhook(@Body() event: CreateNotificationDto, @Req() req: Request) {
     const ip = req.ip;
     await this.svc.createFromEvent(event, ip as unknown as string);
-    return { status: "accepted" };
+
+    return {
+      statusCode: 201,
+      message: "Notification accepted for processing",
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -35,7 +40,7 @@ export class NotificationsController {
     return { data: await this.svc.listFailed(limit ? parseInt(limit) : 100) };
   }
 
-  @UseGuards(JwtAuthGuard)
+  // @UseGuards(JwtAuthGuard)
   @Throttle({ default: { limit: 10, ttl: 60 } }) // max 10 requests per IP per 60 seconds
   @Post("admin/notifications/:id/retry")
   async retry(@Param("id") id: string) {

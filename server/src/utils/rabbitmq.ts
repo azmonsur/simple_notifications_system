@@ -29,7 +29,10 @@ const DELAYED_QUEUES: Record<string, string> = {
   email: "notifications.email.delayed",
 };
 
-const RABBITMQ_URL = process.env.RABBITMQ_URL as string;
+const RABBITMQ_URL =
+  process.env.NODE_ENV === "production"
+    ? (process.env.RABBITMQ_URL_PROD as string)
+    : (process.env.RABBITMQ_URL_DEV as string);
 
 /**
  * Creates a new connection and channel, asserts all queues.
