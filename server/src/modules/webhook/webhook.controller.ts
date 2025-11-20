@@ -10,7 +10,7 @@ export class WebhookController {
 
   @Post("sms")
   @HttpCode(200)
-  async smsWebhook(@Body() payload: SmsWebhookDto, @Headers() headers: any) {
+  async smsWebhook(@Body() payload: any, @Headers() headers: any) {
     return this.webhookService.handleSmsWebhook(payload, headers);
   }
 
