@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     last_error text,
     post_office_center text,
     attachments_meta text,
+    provider_status text,
+    provider_message_id text,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
@@ -70,6 +72,21 @@ CREATE INDEX IF NOT EXISTS idx_notifications_channel ON notifications (channel);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient_role ON notifications (recipient_role);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at);
 CREATE INDEX IF NOT EXISTS idx_notifications_updated_at ON notifications (updated_at);
+
+
+----------------------------------------------------
+-- TABLE: webhook_logs
+----------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS webhook_logs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider text NOT NULL,
+    raw_payload jsonb NOT NULL,
+    status text,
+    message_id text,
+    notification_id uuid,
+    created_at timestamptz DEFAULT now()
+);
 
 ----------------------------------------------------
 -- TABLE: notifications_archive

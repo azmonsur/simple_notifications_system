@@ -7,8 +7,9 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { UserModule } from "./modules/users/user.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { WebhookModule } from "./modules/webhook/webhook.module";
 import { AdminModule } from "./admin/admin.module";
-import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard";
+import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard"; // WebhookModule
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard";
     NotificationsModule,
     AnalyticsModule,
     AuthModule,
+    WebhookModule,
     UserModule,
   ],
   providers: [
