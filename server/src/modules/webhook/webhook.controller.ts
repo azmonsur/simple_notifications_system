@@ -16,10 +16,7 @@ export class WebhookController {
 
   @Post("email")
   @HttpCode(200)
-  async emailWebhook(
-    @Body() payload: EmailWebhookDto,
-    @Headers() headers: any
-  ) {
+  async emailWebhook(@Body() payload: any, @Headers() headers: any) {
     return this.webhookService.handleEmailWebhook(payload, headers);
   }
 
