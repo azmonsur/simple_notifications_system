@@ -15,6 +15,7 @@ import { HttpsOptions } from "@nestjs/common/interfaces/external/https-options.i
 import { readFileSync } from "fs";
 
 // import { migrate } from "./database/migrate-destinations";
+import { setup } from "./database/setup-db";
 
 dotenv.config();
 
@@ -128,5 +129,5 @@ async function bootstrap() {
 
 // Uncomment if you want normal single-process dev run
 bootstrap();
-
+// setup();
 export default bootstrap;

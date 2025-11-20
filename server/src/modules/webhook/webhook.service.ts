@@ -1,15 +1,14 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { query } from "../../utils/db";
 import { logger } from "../../utils/logger";
 
 @Injectable()
 export class WebhookService {
-  private logger = new Logger("WebhookService");
-
   // -------------------------------
   // 📩 HANDLE SMS WEBHOOK
   // -------------------------------
   async handleSmsWebhook(payload: any, headers: any) {
+    logger.info(`SMS Webhook payload:, ${JSON.stringify(payload)}`);
     try {
       logger.info(`📩 SMS Webhook Received: ${JSON.stringify(payload)}`);
 
@@ -43,6 +42,7 @@ export class WebhookService {
   // 📧 HANDLE EMAIL WEBHOOK
   // -------------------------------
   async handleEmailWebhook(payload: any, headers: any) {
+    logger.info(`EMAIL Webhook payload:, ${JSON.stringify(payload)}`);
     try {
       logger.info(`📧 Email Webhook Received: ${JSON.stringify(payload)}`);
 
@@ -70,6 +70,7 @@ export class WebhookService {
   }
 
   async handleWhatsAppWebhook(payload: any, headers: any) {
+    logger.info(`WHATSAPP Webhook payload:, ${JSON.stringify(payload)}`);
     try {
       logger.info(`📧 WhatsApp Webhook Received: ${JSON.stringify(payload)}`);
 

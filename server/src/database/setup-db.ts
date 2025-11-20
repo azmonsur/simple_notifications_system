@@ -2,12 +2,11 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { query, retryQuery } from "../utils/db";
 import { Logger } from "@nestjs/common";
-
-const logger = new Logger("DB-Setup");
+import { logger } from "../utils/logger";
 
 export const setup = async () => {
   try {
-    logger.log("[DB-Setup] Reading schema SQL file...");
+    logger.info("[DB-Setup] Reading schema SQL file...");
     const schemaPath = join(__dirname, "migrations", "schema.sql"); // adjust if your schema file is elsewhere
     const fullSchema = readFileSync(schemaPath, "utf-8");
 
@@ -17,13 +16,13 @@ export const setup = async () => {
       .map((stmt) => stmt.trim())
       .filter(Boolean);
 
-    logger.log(
+    logger.info(
       `[DB-Setup] Split schema into ${statements.length} statement(s). Running sequentially...`
     );
 
     for (let i = 0; i < statements.length; i++) {
       const stmt = statements[i];
-      logger.log(
+      logger.info(
         `[DB-Setup] Running statement ${i + 1}/${
           statements.length
         } (first 80 chars): ${stmt.slice(0, 80)}...`
@@ -38,7 +37,7 @@ export const setup = async () => {
       }
     }
 
-    logger.log("[DB-Setup] Database schema setup completed successfully!");
+    logger.info("[DB-Setup] Database schema setup completed successfully!");
   } catch (err) {
     logger.error("[DB-Setup] Fatal error setting up DB:", err);
     process.exit(1);
@@ -46,6 +45,6 @@ export const setup = async () => {
 };
 
 // Run setup if file is executed directly
-if (require.main === module) {
-  setup();
-}
+// if (require.main === module) {
+//   setup();
+// }
