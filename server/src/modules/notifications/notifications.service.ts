@@ -8,11 +8,16 @@ import {
 } from "@nestjs/common";
 
 import { QueryResult, PoolClient } from "pg";
-import { encryptDestination } from "./utils/crypto";
-import { publishDelivery } from "../../utils/rabbitmq";
+import { encryptDestination, decryptDestination } from "./utils/crypto";
+import {
+  publishDelivery,
+  getChannel,
+  publishRequeue,
+} from "../../utils/rabbitmq";
 import { CreateNotificationDto } from "./dto/notifications.dto";
 import { query as dbQuery, pool } from "../../utils/db";
 import { logger } from "../../utils/logger";
+
 // import amqp from "amqplib";
 const amqp = require("amqplib");
 
@@ -255,86 +260,70 @@ export class NotificationsService {
   // --- Mark notification as queued
   async markQueued(id: string) {
     try {
-      await this.withTransaction(async (client) => {
-        // 1️⃣ Fetch the failed notification
-        const res: QueryResult = await client.query(
-          `SELECT * FROM notifications WHERE id=$1 AND status=$2`,
-          [id, "failed"]
+      await dbQuery("BEGIN");
+
+      // 1️⃣ Fetch the notification for update
+      const res: QueryResult = await dbQuery(
+        `SELECT * FROM notifications WHERE id=$1 AND status=$2 FOR UPDATE`,
+        [id, "failed"]
+      );
+
+      const notif = res.rows[0];
+      if (!notif) {
+        await dbQuery("ROLLBACK");
+        throw new NotFoundException(
+          `Notification ${id} not found or not failed`
         );
-        const notif = res.rows[0];
-        if (!notif) {
-          logger.error(`⚠️ Notification ${id} not found or not failed`);
-          throw new NotFoundException({
-            message: `Notification ${id} not found or not failed`,
-          });
-        }
-
-        // 2️⃣ Update DB to queued
-        await client.query(
-          `UPDATE notifications SET status=$1, attempts=0, updated_at=NOW() WHERE id=$2`,
-          ["queued", id]
-        );
-
-        // 3️⃣ Prepare payload for republishing
-        const payload = {
-          notif_id: notif.id,
-          parcel_id: notif.parcel_id,
-          channel: notif.channel,
-          post_office_center: notif.post_office_center,
-          recipient: {
-            name: notif.recipient_name,
-            role: notif.recipient_role,
-            destination: notif.recipient_destination,
-          },
-          template_vars:
-            typeof notif.template_vars === "string"
-              ? JSON.parse(notif.template_vars)
-              : notif.template_vars,
-          attachments: notif.attachments || undefined,
-          created_at: new Date().toISOString(),
-        };
-
-        // 4️⃣ Publish to main queue
-        await publishDelivery(payload);
-        logger.info(`✅ Notification ${id} republished to main queue`);
-
-        // 5️⃣ Remove from DLQ if exists
-        const connection = await amqp.connect(process.env.RABBITMQ_URL);
-        const channel = await connection.createChannel();
-        const dlqName = `notifications.${notif.channel}.dlq`;
-        await channel.assertQueue(dlqName, { durable: true });
-
-        // Use get + ack, only remove the first message that matches this notif_id
-        let msg;
-        do {
-          msg = await channel.get(dlqName, { noAck: false });
-          if (msg) {
-            const content = JSON.parse(msg.content.toString());
-            if (content.notif_id === notif.id) {
-              channel.ack(msg);
-              logger.info(`🧹 Removed notification ${id} from DLQ: ${dlqName}`);
-              break;
-            } else {
-              channel.nack(msg, false, true); // requeue other messages
-            }
-          }
-        } while (msg);
-
-        await channel.close();
-        await connection.close();
-      });
-    } catch (err: unknown) {
-      if (err instanceof HttpException) {
-        throw err;
       }
 
+      // 2️⃣ Update the notification status to queued
+      await dbQuery(
+        `UPDATE notifications 
+       SET status=$1, attempts=0, updated_at=NOW() 
+       WHERE id=$2`,
+        ["queued", id]
+      );
+
+      // 3️⃣ Build the payload for the main queue
+      const payload = {
+        notif_id: notif.id,
+        parcel_id: notif.parcel_id,
+        channel: notif.channel,
+        post_office_center: notif.post_office_center,
+        recipient: {
+          name: notif.recipient_name,
+          role: notif.recipient_role,
+          destination: decryptDestination(notif.recipient_destination),
+        },
+        template_vars:
+          typeof notif.template_vars === "string"
+            ? JSON.parse(notif.template_vars)
+            : notif.template_vars,
+        attachments: notif.attachments_meta || undefined,
+        created_at: new Date().toISOString(),
+      };
+
+      // 4️⃣ Publish to the main delivery queue
+      await publishDelivery(payload);
+
+      // 5️⃣ Enqueue a requeue job for the cleanup worker
+      try {
+        await publishRequeue({ notif_id: notif.id, channel: notif.channel });
+      } catch (err) {
+        // Log but don't fail the main transaction
+        const errMsg = err instanceof Error ? err.message : String(err);
+        logger.warn(
+          `⚠️ Failed to enqueue DLQ cleanup for notif_id ${notif.id}: ${errMsg}`
+        );
+      }
+
+      await dbQuery("COMMIT");
+
+      return { message: "Requeued successfully" };
+    } catch (err: unknown) {
+      await dbQuery("ROLLBACK");
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error(`❌ markQueued failed for ${id}: ${errMsg}`);
-      // fallback: mark as failed again
-      await dbQuery(
-        "UPDATE notifications SET status=$1, attempts=0, updated_at=now() WHERE id=$2",
-        ["failed", id]
-      );
       throw new InternalServerErrorException("Failed to requeue notification");
     }
   }
@@ -342,14 +331,37 @@ export class NotificationsService {
   // --- Mark notification as resolved
   async markResolved(id: string) {
     try {
+      await dbQuery("BEGIN");
+
+      const res = await dbQuery(
+        "SELECT id, channel FROM notifications WHERE id=$1 FOR UPDATE",
+        [id]
+      );
+      const notif = res.rows[0];
+
+      if (!notif) {
+        await dbQuery("ROLLBACK");
+        throw new NotFoundException(`Notification ${id} not found`);
+      }
+
       await dbQuery(
         "UPDATE notifications SET status=$1, updated_at=now() WHERE id=$2",
         ["resolved", id]
       );
+
+      // ✅ Enqueue cleanup job safely
+      await publishRequeue({ notif_id: id, channel: notif.channel });
+
+      await dbQuery("COMMIT");
+
+      return { message: "Resolved and DLQ cleanup job queued" };
     } catch (err: unknown) {
+      await dbQuery("ROLLBACK");
       const errMsg = err instanceof Error ? err.message : String(err);
-      logger.error(`❌ markResolved failed: ${errMsg}`);
-      throw new InternalServerErrorException("Database update failed");
+      logger.error(`❌ markResolved failed for ${id}: ${errMsg}`);
+      throw new InternalServerErrorException(
+        "Failed to mark notification as resolved"
+      );
     }
   }
 }

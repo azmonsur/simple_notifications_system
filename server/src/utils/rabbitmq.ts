@@ -8,37 +8,45 @@ dotenv.config();
 
 let conn: Connection | null = null;
 let channel: Channel | null = null;
-let connecting = false; // prevent multiple concurrent reconnects
+let connecting = false;
 
-// Define channels, DLQs, and delayed queues
+interface RequeuePayload {
+  notif_id: string;
+  channel: string;
+}
+
+// MAIN queues
 const CHANNEL_QUEUES: Record<string, string> = {
   sms: "notifications.sms",
   whatsapp: "notifications.whatsapp",
   email: "notifications.email",
 };
 
+// DLQs
 const DLQ_QUEUES: Record<string, string> = {
   sms: "notifications.sms.dlq",
   whatsapp: "notifications.whatsapp.dlq",
   email: "notifications.email.dlq",
 };
 
+// delayed queues
 const DELAYED_QUEUES: Record<string, string> = {
   sms: "notifications.sms.delayed",
   whatsapp: "notifications.whatsapp.delayed",
   email: "notifications.email.delayed",
 };
 
+// requeue queue
+const REQUEUE_QUEUE = "notifications.requeue";
+
 const RABBITMQ_URL =
   process.env.NODE_ENV === "production"
     ? (process.env.RABBITMQ_URL_PROD as string)
     : (process.env.RABBITMQ_URL_DEV as string);
 
-/**
- * Creates a new connection and channel, asserts all queues.
- */
 async function connect(): Promise<Channel> {
   if (channel) return channel;
+
   if (connecting) {
     return new Promise((resolve) => {
       const interval = setInterval(() => {
@@ -66,7 +74,6 @@ async function connect(): Promise<Channel> {
       reconnect();
     });
 
-    // Use type assertion to bypass TS missing createConfirmChannel
     channel = (await (conn as any).createConfirmChannel()) as Channel;
 
     channel.on("error", (err) =>
@@ -78,7 +85,7 @@ async function connect(): Promise<Channel> {
       reconnect();
     });
 
-    // Assert main queues, DLQs, and delayed queues
+    // assert standard queues + DLQ + delayed
     for (const [ch, queueName] of Object.entries(CHANNEL_QUEUES)) {
       await channel.assertQueue(queueName, {
         durable: true,
@@ -101,6 +108,9 @@ async function connect(): Promise<Channel> {
       }
     }
 
+    // ✅ assert the requeue cleanup queue
+    await channel.assertQueue(REQUEUE_QUEUE, { durable: true });
+
     logger.info("✅ RabbitMQ connected and all queues ready");
     return channel;
   } catch (err) {
@@ -114,17 +124,11 @@ async function connect(): Promise<Channel> {
   }
 }
 
-/**
- * Returns a connected channel, auto-reconnecting if necessary
- */
 export async function getChannel(): Promise<Channel> {
   if (channel) return channel;
   return connect();
 }
 
-/**
- * Publishes a message to a channel queue immediately
- */
 export async function publishDelivery(payload: any): Promise<void> {
   if (!payload.channel) throw new Error("Payload must include channel");
   const queue = CHANNEL_QUEUES[payload.channel];
@@ -135,21 +139,11 @@ export async function publishDelivery(payload: any): Promise<void> {
     persistent: true,
   });
 
-  if (sent) {
-    logger.info(`📨 Message sent to ${queue}`);
-  } else {
-    logger.warn(`⚠️ Message not sent — queue may be full or unavailable`);
-  }
+  if (sent) logger.info(`📨 Message sent to ${queue}`);
+  else logger.warn(`⚠️ Message not sent — queue may be full`);
 }
 
-/**
- * Publishes a message to a delayed queue (ms)
- * Useful for retrying SMS jobs when Termii cannot send at night
- */
-export async function publishDeliveryDelayed(
-  payload: any,
-  delayMs: number
-): Promise<void> {
+export async function publishDeliveryDelayed(payload: any, delayMs: number) {
   if (!payload.channel) throw new Error("Payload must include channel");
   const baseQueue = CHANNEL_QUEUES[payload.channel];
   if (!baseQueue) throw new Error(`Unknown channel: ${payload.channel}`);
@@ -161,26 +155,38 @@ export async function publishDeliveryDelayed(
   const sent = ch.sendToQueue(
     delayedQueue,
     Buffer.from(JSON.stringify(payload)),
+    { persistent: true, expiration: delayMs }
+  );
+
+  if (sent) logger.info(`⏳ Delayed → ${delayedQueue} (${delayMs}ms)`);
+  else logger.warn(`⚠️ Delayed message NOT sent`);
+}
+
+// ✅ NEW: publish into requeue queue
+// ✅ NEW: publish into requeue queue (safe, typed)
+
+export async function publishRequeue(payload: RequeuePayload): Promise<void> {
+  if (!payload.notif_id || !payload.channel) {
+    throw new Error("Requeue payload must include notif_id and channel");
+  }
+
+  const ch = await getChannel();
+  const sent = ch.sendToQueue(
+    REQUEUE_QUEUE,
+    Buffer.from(JSON.stringify(payload)),
     {
       persistent: true,
-      expiration: delayMs, // message TTL in ms
     }
   );
 
-  if (sent) {
+  if (sent)
     logger.info(
-      `⏳ Delayed message published to ${delayedQueue} with ${delayMs}ms delay`
+      `♻️ Sent notif_id ${payload.notif_id} to requeue cleanup queue`
     );
-  } else {
-    logger.warn(
-      `⚠️ Delayed message not sent — queue may be full or unavailable`
-    );
-  }
+  else
+    logger.warn(`⚠️ Requeue cleanup message for ${payload.notif_id} not sent`);
 }
 
-/**
- * Gracefully closes channel and connection
- */
 export async function closeConnection(): Promise<void> {
   try {
     if (channel) {
@@ -194,17 +200,14 @@ export async function closeConnection(): Promise<void> {
       conn = null;
     }
   } catch (err) {
-    logger.error("⚠️ Error while closing RabbitMQ connection:", err);
+    logger.error("⚠️ Error closing RabbitMQ connection:", err);
   }
 }
 
-/**
- * Attempts to reconnect after connection/channel failure
- */
 async function reconnect() {
   try {
     await connect();
   } catch {
-    // retry happens automatically inside connect()
+    // connect() handles retry
   }
 }

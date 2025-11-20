@@ -14,6 +14,8 @@ import csurf from "csurf";
 import { HttpsOptions } from "@nestjs/common/interfaces/external/https-options.interface";
 import { readFileSync } from "fs";
 
+import { migrate } from "./database/migrate-destinations";
+
 dotenv.config();
 
 // export default bootstrap;
@@ -126,4 +128,5 @@ async function bootstrap() {
 
 // Uncomment if you want normal single-process dev run
 bootstrap();
+// migrate();
 export default bootstrap;

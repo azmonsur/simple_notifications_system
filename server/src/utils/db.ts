@@ -14,7 +14,7 @@ const POSTGRE_URL =
 export const pool = new Pool({
   connectionString: POSTGRE_URL,
   max: 20,
-  idleTimeoutMillis: 15000, // close idle clients after 15s
+  idleTimeoutMillis: 30000, // close idle clients after 15s
   connectionTimeoutMillis: 5000,
 });
 

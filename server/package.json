@@ -12,11 +12,13 @@
     "start:sms-worker": "ts-node src/sms.worker.main.ts",
     "start:email-worker": "ts-node src/email.worker.main.ts",
     "start:whatsapp-worker": "ts-node src/whatsapp.worker.main.ts",
+    "start:cleanup-worker": "ts-node src/cleanup-requeue.worker.main.ts",
     "start:sms-worker:prod": "node dist/sms.worker.main.js",
     "start:email-worker:prod": "node dist/email.worker.main.js",
     "start:whatsapp-worker:prod": "node dist/whatsapp.worker.main.js",
-    "start:all-workers": "concurrently -n SMS,EMAIL,WHATSAPP -c blue,green,magenta \"npm run start:sms-worker\" \"npm run start:email-worker\" \"npm run start:whatsapp-worker\"",
-    "start:all-workers:prod": "concurrently -n SMS,EMAIL,WHATSAPP -c blue,green,magenta \"npm run start:sms-worker:prod\" \"npm run start:email-worker:prod\" \"npm run start:whatsapp-worker:prod\""
+    "start:cleanup-worker:prod": "node dist/cleanup-requeue.worker.main.js",
+    "start:all-workers": "concurrently -n SMS,EMAIL,WHATSAPP -c blue,green,magenta \"npm run start:sms-worker\" \"npm run start:email-worker\" \"npm run start:whatsapp-worker\"  \"npm run start:cleanup-worker\"",
+    "start:all-workers:prod": "concurrently -n SMS,EMAIL,WHATSAPP -c blue,green,magenta \"npm run start:sms-worker:prod\" \"npm run start:email-worker:prod\" \"npm run start:whatsapp-worker:prod\" \"npm run start:cleanup-worker:prod\""
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
