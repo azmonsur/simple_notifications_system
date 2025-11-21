@@ -166,11 +166,22 @@ export class NotificationsService {
                   : destination_center ?? null;
             }
 
+            let attachments = undefined;
+            if (["email", "whatsapp"].includes(ch)) {
+              attachments = [
+                {
+                  filename: `receipt_${tracking_number}.pdf`,
+                  content: "",
+                  type: "application/pdf",
+                },
+              ];
+            }
+
             const notifRes: QueryResult<{ id: string }> = await client.query(
               `INSERT INTO notifications (
                 parcel_id, channel, recipient_role, recipient_name, recipient_destination,
-                template_vars, status, attempts, post_office_center
-              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                template_vars, status, attempts, post_office_center, attachments_meta
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
               RETURNING id`,
               [
                 parcelId,
@@ -187,21 +198,11 @@ export class NotificationsService {
                 "queued",
                 0,
                 postOfficeCenter,
+                attachments ? JSON.stringify(attachments) : null,
               ]
             );
 
             const notif = notifRes.rows[0];
-
-            let attachments = undefined;
-            if (["email", "whatsapp"].includes(ch)) {
-              attachments = [
-                {
-                  filename: `receipt_${tracking_number}.pdf`,
-                  content: "",
-                  type: "application/pdf",
-                },
-              ];
-            }
 
             await publishDelivery({
               notif_id: notif.id,
