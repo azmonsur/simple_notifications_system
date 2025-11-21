@@ -171,7 +171,9 @@ export default function Dashboard(): JSX.Element {
   const totalSent = summary.find((s) => s.status === "sent")?.total || 0;
   const totalFailed = summary.find((s) => s.status === "failed")?.total || 0;
   const totalQueued = summary.find((s) => s.status === "queued")?.total || 0;
-  const totalSentThisMonth = parseInt(sentThisMonth[0]?.sent_this_month || "0");
+  const totalSentThisMonthRaw = parseInt(
+    sentThisMonth[0]?.sent_this_month || "0"
+  );
 
   // Animated counts
   const sentCount = useCountUp(totalSent);
@@ -181,6 +183,7 @@ export default function Dashboard(): JSX.Element {
   const avgNotif = useCountUp(
     Number(avgNotifPerParcel.avg_notif_per_parcel) || 0
   );
+  const sentThisMonthCount = useCountUp(totalSentThisMonthRaw); // <-- Animated counter
 
   // Colors
   const colors = useMemo(
@@ -346,7 +349,7 @@ export default function Dashboard(): JSX.Element {
             },
             {
               label: `Total Sent (${getMonthName()})`,
-              value: totalSentThisMonth,
+              value: sentThisMonthCount, // <-- Fixed animated counter
               color: "text-orange-500",
               subtitle: "This month",
             },

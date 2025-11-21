@@ -61,7 +61,7 @@ export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {
           payload.id || null,
           payload.to || null,
           payload.from || null,
-          payload.status || "unknown",
+          payload.status.toLowerCase() || "unknown",
           null,
           payload,
           payload.sent_at ? new Date(payload.sent_at).toISOString() : null,

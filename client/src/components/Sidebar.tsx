@@ -101,6 +101,7 @@ export default function SidebarLayout() {
           <NavItem to="/">🏠 Dashboard</NavItem>
           <NavItem to="/queues">📬 Message Queue</NavItem>
           <NavItem to="/failed">❌ Failed Messages</NavItem>
+          <NavItem to="/webhook-dlr">📩 Webhook DLR</NavItem>
         </nav>
 
         {auth.token && (

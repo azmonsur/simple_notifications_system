@@ -4,8 +4,10 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import MessageQueue from "./pages/MessageQueue";
 import FailedMessages from "./pages/FailedMessages";
+import WebhookDLR from "./pages/WebhooDLR";
 import Login from "./pages/Login";
 import { useAuth } from "./utils/auth";
+import NotFound from "./pages/NotFound";
 
 function Protected({ children }: { children: JSX.Element }) {
   const { token } = useAuth();
@@ -41,6 +43,22 @@ export default function App() {
             element={
               <Protected>
                 <FailedMessages />
+              </Protected>
+            }
+          />
+          <Route
+            path="/webhook-dlr"
+            element={
+              <Protected>
+                <WebhookDLR />
+              </Protected>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <Protected>
+                <NotFound />
               </Protected>
             }
           />

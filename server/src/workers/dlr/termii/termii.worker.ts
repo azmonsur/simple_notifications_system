@@ -62,7 +62,7 @@ export class TermiiDlrWorkerService implements OnModuleInit, OnModuleDestroy {
           payload.notify_id,
           payload.receiver,
           payload.sender,
-          payload.status,
+          payload.status.split(" | ")[0].toLowerCase(),
           payload.cost ? parseFloat(payload.cost) : null,
           payload,
           payload.sent_at ? new Date(payload.sent_at).toISOString() : null,
