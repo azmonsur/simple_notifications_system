@@ -1,20 +1,44 @@
 // src/analytics/analytics.service.ts
+
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { query as dbQuery } from "../../utils/db";
 
 @Injectable()
 export class AnalyticsService {
+  /**
+   * Build WHERE clause for date filtering.
+   * Expands end date to 23:59:59.
+   */
+  private buildDateFilter(
+    from?: string,
+    to?: string,
+    column: string = "created_at"
+  ): string {
+    const parts: string[] = [];
+
+    if (from) parts.push(`${column} >= '${from} 00:00:00'`);
+    if (to) parts.push(`${column} <= '${to} 23:59:59'`);
+
+    return parts.length ? `WHERE ${parts.join(" AND ")}` : "";
+  }
+
+  // -------------------------------------------------------------
   // 1️⃣ Notification summary (sent, queued, failed)
-  async getNotificationSummary() {
+  // -------------------------------------------------------------
+  async getNotificationSummary(from?: string, to?: string) {
     try {
+      const filter = this.buildDateFilter(from, to);
+
       const res = await dbQuery(`
         SELECT 
           status,
           COUNT(*)::int AS total
         FROM notifications
+        ${filter}
         GROUP BY status
         ORDER BY status DESC;
       `);
+
       return res.rows;
     } catch (err) {
       throw new InternalServerErrorException(
@@ -26,36 +50,45 @@ export class AnalyticsService {
   async getNotificationSentThisMonth() {
     try {
       const res = await dbQuery(`
-        SELECT COUNT(y.status)::int AS sent_this_month FROM parcels x 
-        RIGHT JOIN notifications y ON x.id = y.parcel_id WHERE x.updated_at >= DATE_TRUNC('month', CURRENT_DATE) 
-        AND x.updated_at < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' AND y.status = 'sent';
+        SELECT COUNT(y.status)::int AS sent_this_month 
+        FROM parcels x 
+        RIGHT JOIN notifications y ON x.id = y.parcel_id 
+        WHERE x.updated_at >= DATE_TRUNC('month', CURRENT_DATE) 
+        AND x.updated_at < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month' 
+        AND y.status = 'sent';
       `);
       return res.rows;
     } catch (err) {
       throw new InternalServerErrorException(
-        "Failed to fetch notification summary"
+        "Failed to fetch notification sent this month"
       );
     }
   }
 
-  // src/analytics/analytics.service.ts
-  async getNotificationsByChannelAndStatus() {
+  // -------------------------------------------------------------
+  // Channel + Status Summary
+  // -------------------------------------------------------------
+  async getNotificationsByChannelAndStatus(from?: string, to?: string) {
     try {
-      const res = await dbQuery(`
-      SELECT 
-        channel,
-        status,
-        COUNT(*)::int AS total
-      FROM notifications
-      GROUP BY channel, status
-      ORDER BY channel, status;
-    `);
+      const filter = this.buildDateFilter(from, to);
 
-      // Transform the rows into grouped structure
+      const res = await dbQuery(`
+        SELECT 
+          channel,
+          status,
+          COUNT(*)::int AS total
+        FROM notifications
+        ${filter}
+        GROUP BY channel, status
+        ORDER BY channel, status;
+      `);
+
       const grouped: Record<string, any> = {};
+
       res.rows.forEach((row) => {
         const { channel, status, total } = row;
-        if (!grouped[channel])
+
+        if (!grouped[channel]) {
           grouped[channel] = {
             channel,
             sent: 0,
@@ -63,6 +96,8 @@ export class AnalyticsService {
             failed: 0,
             total: 0,
           };
+        }
+
         grouped[channel][status] = total;
         grouped[channel].total += total;
       });
@@ -75,18 +110,21 @@ export class AnalyticsService {
     }
   }
 
-  // Add this in analytics.service.ts
-  async getNotificationsByChannelAndStatusDash() {
+  async getNotificationsByChannelAndStatusDash(from?: string, to?: string) {
     try {
+      const filter = this.buildDateFilter(from, to);
+
       const res = await dbQuery(`
-      SELECT 
-        channel,
-        status,
-        COUNT(*)::int AS total
-      FROM notifications
-      GROUP BY channel, status
-      ORDER BY channel, status;
-    `);
+        SELECT 
+          channel,
+          status,
+          COUNT(*)::int AS total
+        FROM notifications
+        ${filter}
+        GROUP BY channel, status
+        ORDER BY channel, status;
+      `);
+
       return res.rows;
     } catch (err) {
       throw new InternalServerErrorException(
@@ -95,17 +133,23 @@ export class AnalyticsService {
     }
   }
 
-  // 2️⃣ Total notifications per channel
-  async getNotificationsByChannel() {
+  // -------------------------------------------------------------
+  // Total notifications per channel
+  // -------------------------------------------------------------
+  async getNotificationsByChannel(from?: string, to?: string) {
     try {
+      const filter = this.buildDateFilter(from, to);
+
       const res = await dbQuery(`
         SELECT 
           channel,
           COUNT(*)::int AS total
         FROM notifications
+        ${filter}
         GROUP BY channel
         ORDER BY channel;
       `);
+
       return res.rows;
     } catch (err) {
       throw new InternalServerErrorException(
@@ -114,16 +158,22 @@ export class AnalyticsService {
     }
   }
 
-  // 3️⃣ Total notifications per recipient role
-  async getNotificationsByRecipientRole() {
+  // -------------------------------------------------------------
+  // Total notifications by recipient role
+  // -------------------------------------------------------------
+  async getNotificationsByRecipientRole(from?: string, to?: string) {
     try {
+      const filter = this.buildDateFilter(from, to);
+
       const res = await dbQuery(`
         SELECT 
           recipient_role,
           COUNT(*)::int AS total
         FROM notifications
+        ${filter}
         GROUP BY recipient_role;
       `);
+
       return res.rows;
     } catch (err) {
       throw new InternalServerErrorException(
@@ -132,38 +182,50 @@ export class AnalyticsService {
     }
   }
 
-  // 4️⃣ Parcels summary by current_status
-  async getParcelsByStatus() {
+  // -------------------------------------------------------------
+  // Parcel summary by new_status
+  // -------------------------------------------------------------
+  async getParcelsByStatus(from?: string, to?: string) {
     try {
+      const filter = this.buildDateFilter(from, to, "changed_at");
+
       const res = await dbQuery(`
-         SELECT 
+        SELECT 
           new_status,
           COUNT(*)::int AS total
         FROM parcel_history
+        ${filter}
         GROUP BY new_status
         ORDER BY new_status;
       `);
+
       return res.rows;
     } catch (err) {
       throw new InternalServerErrorException("Failed to fetch parcel summary");
     }
   }
 
-  // 5️⃣ Average time (in hours) per parcel from first to last status
-  async getAverageParcelDuration() {
+  // -------------------------------------------------------------
+  // Average time per parcel
+  // -------------------------------------------------------------
+  async getAverageParcelDuration(from?: string, to?: string) {
     try {
+      const filter = this.buildDateFilter(from, to, "changed_at");
+
       const res = await dbQuery(`
         WITH parcel_durations AS (
           SELECT 
             parcel_id,
             EXTRACT(EPOCH FROM (MAX(changed_at) - MIN(changed_at))) / 3600 AS hours_duration
           FROM parcel_history
+          ${filter}
           GROUP BY parcel_id
         )
         SELECT 
           ROUND(AVG(hours_duration)::numeric, 2) AS avg_hours_per_parcel
         FROM parcel_durations;
       `);
+
       return res.rows[0] || { avg_hours_per_parcel: 0 };
     } catch (err) {
       throw new InternalServerErrorException(
@@ -172,17 +234,23 @@ export class AnalyticsService {
     }
   }
 
-  // 6️⃣ Parcel transitions count (how many times each status occurred)
-  async getParcelStatusTransitionCounts() {
+  // -------------------------------------------------------------
+  // Parcel status transition counts
+  // -------------------------------------------------------------
+  async getParcelStatusTransitionCounts(from?: string, to?: string) {
     try {
+      const filter = this.buildDateFilter(from, to, "changed_at");
+
       const res = await dbQuery(`
         SELECT 
           new_status,
           COUNT(*)::int AS transitions
         FROM parcel_history
+        ${filter}
         GROUP BY new_status
         ORDER BY transitions DESC;
       `);
+
       return res.rows;
     } catch (err) {
       throw new InternalServerErrorException(
@@ -191,18 +259,24 @@ export class AnalyticsService {
     }
   }
 
-  // 7️⃣ Average number of notifications per parcel
-  async getAvgNotificationsPerParcel() {
+  // -------------------------------------------------------------
+  // Average notifications per parcel
+  // -------------------------------------------------------------
+  async getAvgNotificationsPerParcel(from?: string, to?: string) {
     try {
+      const filter = this.buildDateFilter(from, to);
+
       const res = await dbQuery(`
         SELECT 
           ROUND(AVG(cnt)::numeric, 2) AS avg_notif_per_parcel
         FROM (
           SELECT parcel_id, COUNT(*) AS cnt
           FROM notifications
+          ${filter}
           GROUP BY parcel_id
         ) AS sub;
       `);
+
       return res.rows[0] || { avg_notif_per_parcel: 0 };
     } catch (err) {
       throw new InternalServerErrorException(
@@ -211,10 +285,20 @@ export class AnalyticsService {
     }
   }
 
-  // 8️⃣ Total parcels handled (for overall metric)
-  async getTotalParcels() {
+  // -------------------------------------------------------------
+  // Total parcels
+  // -------------------------------------------------------------
+  async getTotalParcels(from?: string, to?: string) {
     try {
-      const res = await dbQuery(`SELECT COUNT(*)::int AS total FROM parcels;`);
+      // parcels table uses created_at
+      const filter = this.buildDateFilter(from, to);
+
+      const res = await dbQuery(`
+        SELECT COUNT(*)::int AS total 
+        FROM parcels
+        ${filter};
+      `);
+
       return res.rows[0];
     } catch (err) {
       throw new InternalServerErrorException("Failed to get total parcels");

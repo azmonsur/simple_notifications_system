@@ -34,11 +34,39 @@ export default function MessageQueue() {
   const [filterChannel, setFilterChannel] = useState("all");
   const [loading, setLoading] = useState(false);
 
+  /** DATE FILTERS **/
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const handleFromChange = (value: string) => {
+    if (to && value > to) {
+      alert("From date cannot be later than To date");
+      return;
+    }
+    setFrom(value);
+  };
+
+  const handleToChange = (value: string) => {
+    if (from && value < from) {
+      alert("To date cannot be earlier than From date");
+      return;
+    }
+    setTo(value);
+  };
+
   useEffect(() => {
     const fetchStats = async () => {
       setLoading(true);
       try {
-        const res = await api.get("/analytics/notifications/channel-status");
+        const query = new URLSearchParams();
+        if (from) query.append("from", from);
+        if (to) query.append("to", to);
+
+        const res = await api.get(
+          `/analytics/notifications/channel-status?${query}`
+        );
         setChannelStats(res.data.data || []);
       } catch (err) {
         console.error("Error fetching analytics:", err);
@@ -48,7 +76,7 @@ export default function MessageQueue() {
     };
 
     fetchStats();
-  }, []);
+  }, [from, to]);
 
   const filteredStats =
     filterChannel === "all"
@@ -87,7 +115,7 @@ export default function MessageQueue() {
     maintainAspectRatio: false,
     animation: {
       duration: 1000,
-      easing: "easeOutQuart",
+      easing: "easeOutQuart" as const,
     },
     plugins: {
       legend: { position: "top" as const },
@@ -110,9 +138,11 @@ export default function MessageQueue() {
 
   return (
     <div className="space-y-8">
-      {/* Header and filter */}
+      {/* Header and filters */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h2 className="text-2xl font-semibold">Message Queue Analytics</h2>
+
+        {/* Channel filter */}
         <div className="flex items-center gap-2">
           <label className="text-sm">Channel:</label>
           <select
@@ -127,6 +157,26 @@ export default function MessageQueue() {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Date filters */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm">From:</label>
+          <input
+            type="date"
+            max={today}
+            value={from}
+            onChange={(e) => handleFromChange(e.target.value)}
+            className="border px-2 py-1 rounded-md"
+          />
+          <label className="text-sm">To:</label>
+          <input
+            type="date"
+            max={today}
+            value={to}
+            onChange={(e) => handleToChange(e.target.value)}
+            className="border px-2 py-1 rounded-md"
+          />
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Sidebar from "./components/Sidebar";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
@@ -16,9 +16,25 @@ function Protected({ children }: { children: JSX.Element }) {
 }
 
 export default function App() {
+  const [darkMode, setDarkMode] = useState<boolean>(
+    localStorage.getItem("theme") === "dark" ||
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkMode) {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [darkMode]);
+
   return (
     <div className="flex h-screen">
-      <Sidebar />
+      <Sidebar darkMode={darkMode} setDarkMode={setDarkMode} />
       <main className="flex-1 p-6 sm:pt-6 pt-20 overflow-auto">
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -26,7 +42,7 @@ export default function App() {
             path="/"
             element={
               <Protected>
-                <Dashboard />
+                <Dashboard darkMode={darkMode} setDarkMode={setDarkMode} />
               </Protected>
             }
           />

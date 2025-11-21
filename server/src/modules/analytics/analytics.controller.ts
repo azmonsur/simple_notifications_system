@@ -1,5 +1,5 @@
 // src/analytics/analytics.controller.ts
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { AnalyticsService } from "./analytics.service";
 import { JwtAuthGuard } from "../auth/jwt.guard";
 import { Throttle } from "@nestjs/throttler";
@@ -11,65 +11,116 @@ export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get("notifications/summary")
-  async getNotificationSummary() {
-    return { data: await this.analyticsService.getNotificationSummary() };
+  async getNotificationSummary(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    return {
+      data: await this.analyticsService.getNotificationSummary(from, to),
+    };
   }
 
   @Get("notifications/sent-this-month")
   async getNotificationSentThisMonth() {
+    // ⚠ This endpoint is month-based and does not accept date filters
     return { data: await this.analyticsService.getNotificationSentThisMonth() };
   }
 
   @Get("notifications/channel-status")
-  async getNotificationsByChannelAndStatus() {
+  async getNotificationsByChannelAndStatus(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
     return {
-      data: await this.analyticsService.getNotificationsByChannelAndStatus(),
+      data: await this.analyticsService.getNotificationsByChannelAndStatus(
+        from,
+        to
+      ),
     };
   }
 
   @Get("notifications/channel-status-dash")
-  async getNotificationsByChannelAndStatusDash() {
+  async getNotificationsByChannelAndStatusDash(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
     return {
-      data: await this.analyticsService.getNotificationsByChannelAndStatusDash(),
+      data: await this.analyticsService.getNotificationsByChannelAndStatusDash(
+        from,
+        to
+      ),
     };
   }
 
   @Get("notifications/channel")
-  async getNotificationsByChannel() {
-    return { data: await this.analyticsService.getNotificationsByChannel() };
+  async getNotificationsByChannel(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    return {
+      data: await this.analyticsService.getNotificationsByChannel(from, to),
+    };
   }
 
   @Get("notifications/recipient-role")
-  async getNotificationsByRecipientRole() {
+  async getNotificationsByRecipientRole(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
     return {
-      data: await this.analyticsService.getNotificationsByRecipientRole(),
+      data: await this.analyticsService.getNotificationsByRecipientRole(
+        from,
+        to
+      ),
     };
   }
 
   @Get("parcels/status")
-  async getParcelsByStatus() {
-    return { data: await this.analyticsService.getParcelsByStatus() };
+  async getParcelsByStatus(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    return { data: await this.analyticsService.getParcelsByStatus(from, to) };
   }
 
   @Get("parcels/average-duration")
-  async getAverageParcelDuration() {
-    return { data: await this.analyticsService.getAverageParcelDuration() };
+  async getAverageParcelDuration(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    return {
+      data: await this.analyticsService.getAverageParcelDuration(from, to),
+    };
   }
 
   @Get("parcels/transitions")
-  async getParcelStatusTransitionCounts() {
+  async getParcelStatusTransitionCounts(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
     return {
-      data: await this.analyticsService.getParcelStatusTransitionCounts(),
+      data: await this.analyticsService.getParcelStatusTransitionCounts(
+        from,
+        to
+      ),
     };
   }
 
   @Get("notifications/avg-per-parcel")
-  async getAvgNotificationsPerParcel() {
-    return { data: await this.analyticsService.getAvgNotificationsPerParcel() };
+  async getAvgNotificationsPerParcel(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    return {
+      data: await this.analyticsService.getAvgNotificationsPerParcel(from, to),
+    };
   }
 
   @Get("parcels/total")
-  async getTotalParcels() {
-    return { data: await this.analyticsService.getTotalParcels() };
+  async getTotalParcels(
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    return { data: await this.analyticsService.getTotalParcels(from, to) };
   }
 }

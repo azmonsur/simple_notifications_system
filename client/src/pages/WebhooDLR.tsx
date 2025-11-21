@@ -267,15 +267,43 @@ export default function WebhookDLR() {
 
   return (
     <div className="flex min-h-screen">
-      <main className="flex-1 p-6 overflow-auto bg-gray-50 dark:bg-gray-900">
+      <main className="flex-1 p-6 pt-2 overflow-auto bg-gray-50 dark:bg-gray-900">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
             📩 Webhook DLR Analytics
           </h1>
+
+          {/* Date filters */}
+          <div className="flex gap-4 mb-6">
+            <div>
+              <label className="block text-gray-600 dark:text-gray-300 text-sm">
+                From
+              </label>
+              <input
+                type="date"
+                className="border rounded px-2 py-1"
+                max={today}
+                value={from}
+                onChange={(e) => handleFromChange(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-gray-600 dark:text-gray-300 text-sm">
+                To
+              </label>
+              <input
+                type="date"
+                className="border rounded px-2 py-1"
+                max={today}
+                value={to}
+                onChange={(e) => handleToChange(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Date filters */}
-        <div className="flex gap-4 mb-6">
+        {/* <div className="flex gap-4 mb-6">
           <div>
             <label className="block text-gray-600 dark:text-gray-300 text-sm">
               From
@@ -300,7 +328,7 @@ export default function WebhookDLR() {
               onChange={(e) => handleToChange(e.target.value)}
             />
           </div>
-        </div>
+        </div> */}
 
         {/* Charts grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
