@@ -1,8 +1,8 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
-import { logger } from "../../utils/logger";
-import SendWhatsAppCloud from "../../helpers/sendWhatsappCloud";
-import { query as dbQuery } from "../../utils/db";
+import { getChannel, publishDeliveryDelayed } from "../../../utils/rabbitmq";
+import { logger } from "../../../utils/logger";
+import SendWhatsAppCloud from "../../../helpers/sendWhatsappCloud";
+import { query as dbQuery } from "../../../utils/db";
 
 // --- Interfaces ---
 interface Recipient {

@@ -1,7 +1,7 @@
 // src/sms.worker.main.ts
 import { NestFactory } from "@nestjs/core";
-import { SmsWorkerModule } from "./workers/sms/sms.worker.module";
-import { SmsWorkerService } from "./workers/sms/sms.worker";
+import { SmsWorkerModule } from "./workers/notification/sms/sms.worker.module";
+import { SmsWorkerService } from "./workers/notification/sms/sms.worker";
 import { logger } from "./utils/logger";
 import * as dotenv from "dotenv";
 

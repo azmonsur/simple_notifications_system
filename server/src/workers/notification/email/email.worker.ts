@@ -1,11 +1,11 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
-import { logger } from "../../utils/logger";
-import SendEmailSendGrid from "../../helpers/sendEmailSendgrid";
-import { toTitleCase } from "../../helpers/convertToTitleCase";
+import { getChannel, publishDeliveryDelayed } from "../../../utils/rabbitmq";
+import { logger } from "../../../utils/logger";
+import SendEmailSendGrid from "../../../helpers/sendEmailSendgrid";
+import { toTitleCase } from "../../../helpers/convertToTitleCase";
 import Bottleneck from "bottleneck";
-import { query as dbQuery } from "../../utils/db";
-import { generateReceiptPDF } from "../../helpers/generateReceiptPDF";
+import { query as dbQuery } from "../../../utils/db";
+import { generateReceiptPDF } from "../../../helpers/generateReceiptPDF";
 
 interface Recipient {
   role?: "sender" | "receiver";

@@ -5,9 +5,9 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from "@nestjs/common";
-import { getChannel, publishDeliveryDelayed } from "../../utils/rabbitmq";
-import { query as dbQuery } from "../../utils/db";
-import SendSMSTermii from "../../helpers/sendSMSTermii";
+import { getChannel, publishDeliveryDelayed } from "../../../utils/rabbitmq";
+import { query as dbQuery } from "../../../utils/db";
+import SendSMSTermii from "../../../helpers/sendSMSTermii";
 import Bottleneck from "bottleneck";
 
 // --- Interfaces ---

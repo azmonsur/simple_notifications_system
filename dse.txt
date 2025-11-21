@@ -1,0 +1,64 @@
+{
+  "type": "outbound", 
+  "receiver":"2348132329187",
+  "sender":"CyberBridge",
+  "message":"Hi Biola Abodunrin, Thank you for your shipment. Order (NIP098UNH) estimated charges: N1,000.00.",
+  "cost":"10.0000",
+  "pages":2,
+  "command":"deliver",
+  "status":"DELIVERED | Message delivered to handset",
+  "channel":"generic",
+  "message_id":"3017636638097397161867125",
+  "message_id_str":"3017636638097397161867125",
+  "sent_at":"2025-11-20T19:36:49.777211Z",
+  "delivered_at":"2025-11-20T19:36:51.332056Z",
+  "msgtype":5,
+  "origid":"3017636638097397161867125",
+  "messagestate":"Delivered",
+  "notify_id":"3017636638097397161867125"
+  }
+
+
+
+
+ [
+  {
+    "email":"donkenny03@gmail.com",
+    "event":"delivered",
+    "ip":"149.72.154.232",
+    "response":"250 2.0.0 OK  1763663812 d75a77b69052e-4ee48eaeea9si10574311cf.1007 - gsmtp","sg_event_id":"ZGVsaXZlcmVkLTAtNTcxNTg5MDQteWJQOU1vRklUVDZRUFpBOC1XZ1VEdy0w",
+    "sg_message_id":"ybP9MoFITT6QPZA8-WgUDw.recvd-769f975875-9cdbw-1-691F5FC2-10.0",
+    "smtp-id":"<ybP9MoFITT6QPZA8-WgUDw@geopod-ismtpd-15>",
+    "timestamp":1763663812,
+    "tls":1
+  }
+]
+
+
+
+ {
+  "payload": {
+    "tracking_number": "NIP987GF",
+    "parcel_status": "pending",
+    "amount": 1000,
+    "origin_center": "Abuja office",
+    "destination_center": "Lagos office",
+    "sender": {
+      "name": "Biola Abodunrin",
+      "phone": "+2348132329187",
+      "email": "monsur.koa@gmail.com",
+      "preferred_channels": [
+          "whatsapp", "email"
+      ]
+    },
+    "receiver": {
+      "name": "Azeez Monsur",
+      "phone": "+2347046147122",
+      "email": "donkenny03@gmail.com",
+      "preferred_channels": [
+         "whatsapp", "sms"
+      ]
+    }
+  }
+}
+

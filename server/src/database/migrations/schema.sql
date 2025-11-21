@@ -77,16 +77,33 @@ CREATE INDEX IF NOT EXISTS idx_notifications_updated_at ON notifications (update
 ----------------------------------------------------
 -- TABLE: webhook_logs
 ----------------------------------------------------
-
 CREATE TABLE IF NOT EXISTS webhook_logs (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    provider text NOT NULL,
-    raw_payload jsonb NOT NULL,
-    status text,
-    message_id text,
-    notification_id uuid,
-    created_at timestamptz DEFAULT now()
+    id BIGSERIAL PRIMARY KEY,
+    provider VARCHAR(50) NOT NULL,         -- termii | sendgrid | whatsapp_meta
+    channel VARCHAR(50) NOT NULL,          -- sms | email | whatsapp
+    message_id VARCHAR(100) NOT NULL,      -- original message ID from provider
+    external_id VARCHAR(100),              -- notify_id / sg_message_id / WhatsApp message ID
+    recipient VARCHAR(50),                 -- phone number or email
+    sender VARCHAR(50),                     -- sender info (optional)
+    status VARCHAR(50) NOT NULL,           -- delivered, failed, read, bounced, etc.
+    cost NUMERIC(10,4),                    -- optional: message cost (Termii SMS only)
+    raw_payload JSONB NOT NULL,            -- full webhook payload for reference
+    sent_at TIMESTAMP WITH TIME ZONE,      -- optional: when message was sent
+    delivered_at TIMESTAMP WITH TIME ZONE, -- optional: when message was delivered
+    retries INT DEFAULT 0,                 -- number of retry attempts (if using DLQ)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- For fast lookup by provider + message_id
+CREATE INDEX idx_webhook_logs_provider_message ON webhook_logs(provider, message_id);
+
+-- For querying by recipient & status
+CREATE INDEX idx_webhook_logs_recipient_status ON webhook_logs(recipient, status);
+
+-- Optional: time-based queries
+CREATE INDEX idx_webhook_logs_created_at ON webhook_logs(created_at);
+
 
 ----------------------------------------------------
 -- TABLE: notifications_archive

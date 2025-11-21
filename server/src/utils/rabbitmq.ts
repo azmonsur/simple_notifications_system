@@ -39,6 +39,32 @@ const DELAYED_QUEUES: Record<string, string> = {
 // requeue queue
 const REQUEUE_QUEUE = "notifications.requeue";
 
+/* =========================
+   DLR (provider-based) QUEUES
+   We add Termii, SendGrid, WhatsApp Meta
+   ========================= */
+
+// DLR queues (provider based)
+const DLR_QUEUES: Record<string, string> = {
+  termii: "dlr.termii",
+  sendgrid: "dlr.sendgrid",
+  whatsapp_meta: "dlr.whatsapp.meta",
+};
+
+// DLR DLQs
+const DLR_DLQ_QUEUES: Record<string, string> = {
+  termii: "dlr.termii.dlq",
+  sendgrid: "dlr.sendgrid.dlq",
+  whatsapp_meta: "dlr.whatsapp.meta.dlq",
+};
+
+// DLR delayed queues
+const DLR_DELAYED_QUEUES: Record<string, string> = {
+  termii: "dlr.termii.delayed",
+  sendgrid: "dlr.sendgrid.delayed",
+  whatsapp_meta: "dlr.whatsapp.meta.delayed",
+};
+
 const RABBITMQ_URL =
   process.env.NODE_ENV === "production"
     ? (process.env.RABBITMQ_URL_PROD as string)
@@ -110,6 +136,37 @@ async function connect(): Promise<Channel> {
 
     // ✅ assert the requeue cleanup queue
     await channel.assertQueue(REQUEUE_QUEUE, { durable: true });
+
+    /* =========================
+       ASSERT DLR QUEUES (provider-based)
+       Termii, SendGrid, WhatsApp Meta
+       ========================= */
+    for (const provider of Object.keys(DLR_QUEUES)) {
+      const main = DLR_QUEUES[provider];
+      const dlq = DLR_DLQ_QUEUES[provider];
+      const delayed = DLR_DELAYED_QUEUES[provider];
+
+      // main dlr queue -> routes to provider DLQ on failure
+      await channel.assertQueue(main, {
+        durable: true,
+        arguments: {
+          "x-dead-letter-exchange": "",
+          "x-dead-letter-routing-key": dlq,
+        },
+      });
+
+      // provider DLQ
+      await channel.assertQueue(dlq, { durable: true });
+
+      // delayed queue for provider retries (messages there TTL -> bounce back to main queue)
+      await channel.assertQueue(delayed, {
+        durable: true,
+        arguments: {
+          "x-dead-letter-exchange": "",
+          "x-dead-letter-routing-key": main,
+        },
+      });
+    }
 
     logger.info("✅ RabbitMQ connected and all queues ready");
     return channel;
@@ -186,6 +243,55 @@ export async function publishRequeue(payload: RequeuePayload): Promise<void> {
   else
     logger.warn(`⚠️ Requeue cleanup message for ${payload.notif_id} not sent`);
 }
+
+/* =========================
+   DLR PUBLISHER HELPERS
+   Use these from your webhook controllers:
+     publishDLR("termii", payload)
+     publishDLRDelayed("termii", payload, 15000) // 15s
+   ========================= */
+
+export async function publishDLR(
+  provider: keyof typeof DLR_QUEUES,
+  payload: any
+): Promise<void> {
+  const queue = DLR_QUEUES[provider];
+  if (!queue) throw new Error(`Unknown DLR provider: ${provider}`);
+
+  const ch = await getChannel();
+  const sent = ch.sendToQueue(queue, Buffer.from(JSON.stringify(payload)), {
+    persistent: true,
+  });
+
+  if (sent) logger.info(`📨 DLR published to ${queue}`);
+  else logger.warn(`⚠️ DLR not published — queue may be full: ${queue}`);
+}
+
+export async function publishDLRDelayed(
+  provider: keyof typeof DLR_DELAYED_QUEUES,
+  payload: any,
+  delayMs: number,
+  attempt: number = 1 // default attempt = 1
+): Promise<void> {
+  const queue = DLR_DELAYED_QUEUES[provider];
+  if (!queue) throw new Error(`No delayed DLR queue for provider: ${provider}`);
+
+  const ch = await getChannel();
+  const sent = ch.sendToQueue(queue, Buffer.from(JSON.stringify(payload)), {
+    persistent: true,
+    expiration: delayMs,
+    headers: { "x-attempt": attempt }, // pass the current attempt
+  });
+
+  if (sent)
+    logger.info(`⏳ DLR Delayed → ${queue} (${delayMs}ms, attempt=${attempt})`);
+  else logger.warn(`⚠️ DLR delayed message NOT sent → ${queue}`);
+}
+
+/* Optionally you can directly route to provider DLQ programmatically:
+   export async function publishDLRToDLQ(provider: keyof typeof DLR_DLQ_QUEUES, payload: any) { ... }
+   but it's not implemented by default — your workers should decide when to ack -> dlq by rejecting/negative-acking.
+*/
 
 export async function closeConnection(): Promise<void> {
   try {

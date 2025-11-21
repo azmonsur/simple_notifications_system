@@ -1,5 +1,5 @@
 import { NestFactory } from "@nestjs/core";
-import { EmailWorkerModule } from "./workers/email/email.worker.module";
+import { EmailWorkerModule } from "./workers/notification/email/email.worker.module";
 import { logger } from "./utils/logger";
 import * as dotenv from "dotenv";
 

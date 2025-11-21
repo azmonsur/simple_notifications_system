@@ -1,5 +1,5 @@
 import { NestFactory } from "@nestjs/core";
-import { WhatsappWorkerModule } from "./workers/whatsapp/whatsapp.worker.module";
+import { WhatsappWorkerModule } from "./workers/notification/whatsapp/whatsapp.worker.module";
 import { logger } from "./utils/logger";
 import * as dotenv from "dotenv";
 
