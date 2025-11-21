@@ -41,7 +41,7 @@ const REQUEUE_QUEUE = "notifications.requeue";
 
 /* =========================
    DLR (provider-based) QUEUES
-   We add Termii, SendGrid, WhatsApp Meta
+   Termii, SendGrid, WhatsApp Meta are added
    ========================= */
 
 // DLR queues (provider based)
@@ -51,18 +51,18 @@ const DLR_QUEUES: Record<string, string> = {
   whatsapp_meta: "dlr.whatsapp.meta",
 };
 
-// DLR DLQs
-const DLR_DLQ_QUEUES: Record<string, string> = {
-  termii: "dlr.termii.dlq",
-  sendgrid: "dlr.sendgrid.dlq",
-  whatsapp_meta: "dlr.whatsapp.meta.dlq",
-};
-
 // DLR delayed queues
 const DLR_DELAYED_QUEUES: Record<string, string> = {
   termii: "dlr.termii.delayed",
   sendgrid: "dlr.sendgrid.delayed",
   whatsapp_meta: "dlr.whatsapp.meta.delayed",
+};
+
+// DLR DLQs
+const DLR_DLQ_QUEUES: Record<string, string> = {
+  termii: "dlr.termii.dlq",
+  sendgrid: "dlr.sendgrid.dlq",
+  whatsapp_meta: "dlr.whatsapp.meta.dlq",
 };
 
 const RABBITMQ_URL =
