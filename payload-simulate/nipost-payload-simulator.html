@@ -1,229 +1,315 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NIPOST SNS Simulator</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #a8edea, #fed6e3);
-      margin: 0;
-      padding: 0;
-      color: #333;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-    header {
-      background: linear-gradient(135deg, #0056b3, #007bff);
-      color: #fff;
-      text-align: center;
-      padding: 20px 10px;
-      font-size: 24px;
-      font-weight: bold;
-      letter-spacing: 1px;
-      position: sticky;
-      top: 0;
-      z-index: 1000;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-    }
-    .container {
-      flex: 1;
-      background: #fff;
-      margin: 20px auto;
-      padding: 30px;
-      border-radius: 15px;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-      width: 90%;
-      max-width: 800px;
-      overflow-y: auto;
-    }
-    h2, h3 {
-      text-align: center;
-      color: #007bff;
-      margin-bottom: 10px;
-    }
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 10px;
-    }
-    input, select {
-      width: 100%;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      margin-top: 5px;
-      font-size: 14px;
-    }
-    .section {
-      background: #f9f9f9;
-      padding: 15px;
-      border-radius: 10px;
-      margin-top: 20px;
-    }
-    .channels {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 10px;
-    }
-    .channels label {
-      font-weight: normal;
-    }
-    button {
-      width: 100%;
-      background: #007bff;
-      color: #fff;
-      border: none;
-      padding: 15px;
-      border-radius: 10px;
-      margin-top: 20px;
-      cursor: pointer;
-      font-size: 16px;
-      transition: background 0.3s ease;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    .response {
-      margin-top: 20px;
-      text-align: center;
-      font-size: 14px;
-      word-wrap: break-word;
-    }
-    @media (max-width: 600px) {
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NIPOST SNS Simulator</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #a8edea, #fed6e3);
+        margin: 0;
+        padding: 0;
+        color: #333;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
       header {
-        font-size: 20px;
+        background: linear-gradient(135deg, #0056b3, #007bff);
+        color: #fff;
+        text-align: center;
+        padding: 20px 10px;
+        font-size: 24px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
       }
       .container {
-        padding: 20px;
+        flex: 1;
+        background: #fff;
+        margin: 20px auto;
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        width: 90%;
+        max-width: 800px;
+        overflow-y: auto;
       }
-      button {
-        padding: 12px;
+      h2,
+      h3 {
+        text-align: center;
+        color: #007bff;
+        margin-bottom: 10px;
+      }
+      label {
+        font-weight: bold;
+        display: block;
+        margin-top: 10px;
+      }
+      input,
+      select {
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        margin-top: 5px;
         font-size: 14px;
       }
-    }
-  </style>
-</head>
-<body>
-  <header>NIPOST SNS Simulator</header>
-  <div class="container">
-    <h2>Parcel Payload Submission</h2>
-    <form id="parcelForm">
-      <label>Tracking Number</label>
-      <input type="text" id="tracking_number" required  />
-
-      <label>Parcel Status</label>
-      <select id="parcel_status" required>
-        <option value="">--Select Status--</option>
-        <option value="pending">Pending</option>
-        <option value="dispatched">Dispatched</option>
-        <option value="arrived">Arrived</option>
-        <option value="received">Received</option>
-	<option value="returned">Returned</option>
-      </select>
-
-      <label>Amount</label>
-      <input type="number" id="amount" required placeholder="e.g. 1000" />
-
-      <label>Origin Center</label>
-      <input type="text" id="origin_center" required placeholder="e.g. Abuja office" />
-
-      <label>Destination Center</label>
-      <input type="text" id="destination_center" required placeholder="e.g. Lagos office" />
-
-      <div class="section">
-        <h3>Sender Details</h3>
-        <label>Name</label>
-        <input type="text" id="sender_name" required placeholder="Sender's name" />
-        <label>Phone</label>
-        <input type="text" id="sender_phone" required placeholder="+234XXXXXXXXXX" />
-        <label>Email</label>
-        <input type="email" id="sender_email" required placeholder="sender@example.com" />
-        <label>Preferred Channels</label>
-        <div class="channels">
-          <label><input type="checkbox" class="sender_channel" value="whatsapp" /> WhatsApp</label>
-          <label><input type="checkbox" class="sender_channel" value="email" /> Email</label>
-          <label><input type="checkbox" class="sender_channel" value="sms" /> SMS</label>
-        </div>
-      </div>
-
-      <div class="section">
-        <h3>Receiver Details</h3>
-        <label>Name</label>
-        <input type="text" id="receiver_name" required placeholder="Receiver's name" />
-        <label>Phone</label>
-        <input type="text" id="receiver_phone" required placeholder="+234XXXXXXXXXX" />
-        <label>Email</label>
-        <input type="email" id="receiver_email" required placeholder="receiver@example.com" />
-        <label>Preferred Channels</label>
-        <div class="channels">
-          <label><input type="checkbox" class="receiver_channel" value="whatsapp" /> WhatsApp</label>
-          <label><input type="checkbox" class="receiver_channel" value="email" /> Email</label>
-          <label><input type="checkbox" class="receiver_channel" value="sms" /> SMS</label>
-        </div>
-      </div>
-
-      <button type="submit">Send Payload</button>
-      <div class="response" id="response"></div>
-    </form>
-  </div>
-
-  <script>
-    function generateTrackingNumber() {
-      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      const randomNum = Math.floor(100 + Math.random() * 900);
-      const randomLetters = Array.from({length: 3}, () => letters[Math.floor(Math.random() * letters.length)]).join('');
-      return `NIP${randomNum}${randomLetters}`;
-    }
-    document.getElementById('tracking_number').value = generateTrackingNumber();
-
-    document.getElementById('parcelForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const senderChannels = Array.from(document.querySelectorAll('.sender_channel:checked')).map(ch => ch.value);
-      const receiverChannels = Array.from(document.querySelectorAll('.receiver_channel:checked')).map(ch => ch.value);
-
-      const data = {
-        payload: {
-          tracking_number: document.getElementById('tracking_number').value,
-          parcel_status: document.getElementById('parcel_status').value,
-          amount: parseFloat(document.getElementById('amount').value),
-          origin_center: document.getElementById('origin_center').value,
-          destination_center: document.getElementById('destination_center').value,
-          sender: {
-            name: document.getElementById('sender_name').value,
-            phone: document.getElementById('sender_phone').value,
-            email: document.getElementById('sender_email').value,
-            preferred_channels: senderChannels
-          },
-          receiver: {
-            name: document.getElementById('receiver_name').value,
-            phone: document.getElementById('receiver_phone').value,
-            email: document.getElementById('receiver_email').value,
-            preferred_channels: receiverChannels
-          }
-        }
-      };
-
-      try {
-        const response = await fetch('http://localhost:3001/api/v1/message', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-        document.getElementById('response').innerHTML = `<span style="color:green;">✅ Payload sent successfully!</span><br><pre>${JSON.stringify(result?.status, null, 2)}</pre>`;
-      } catch (err) {
-        document.getElementById('response').innerHTML = `<span style="color:red;">❌ Failed to send payload:</span> ${err}`;
+      .section {
+        background: #f9f9f9;
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 20px;
       }
-    });
-  </script>
-</body>
+      .channels {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .channels label {
+        font-weight: normal;
+      }
+      button {
+        width: 100%;
+        background: #007bff;
+        color: #fff;
+        border: none;
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 20px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background 0.3s ease;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      .response {
+        margin-top: 20px;
+        text-align: center;
+        font-size: 14px;
+        word-wrap: break-word;
+      }
+      @media (max-width: 600px) {
+        header {
+          font-size: 20px;
+        }
+        .container {
+          padding: 20px;
+        }
+        button {
+          padding: 12px;
+          font-size: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>NIPOST SNS Simulator</header>
+    <div class="container">
+      <h2>Parcel Payload Submission</h2>
+      <form id="parcelForm">
+        <label>Tracking Number</label>
+        <input type="text" id="tracking_number" required />
+
+        <label>Parcel Status</label>
+        <select id="parcel_status" required>
+          <option value="">--Select Status--</option>
+          <option value="pending">Pending</option>
+          <option value="dispatched">Dispatched</option>
+          <option value="arrived">Arrived</option>
+          <option value="received">Received</option>
+          <option value="returned">Returned</option>
+        </select>
+
+        <label>Amount</label>
+        <input type="number" id="amount" required placeholder="e.g. 1000" />
+
+        <label>Origin Center</label>
+        <input
+          type="text"
+          id="origin_center"
+          required
+          placeholder="e.g. Abuja office"
+        />
+
+        <label>Destination Center</label>
+        <input
+          type="text"
+          id="destination_center"
+          required
+          placeholder="e.g. Lagos office"
+        />
+
+        <div class="section">
+          <h3>Sender Details</h3>
+          <label>Name</label>
+          <input
+            type="text"
+            id="sender_name"
+            required
+            placeholder="Sender's name"
+          />
+          <label>Phone</label>
+          <input
+            type="text"
+            id="sender_phone"
+            required
+            placeholder="+234XXXXXXXXXX"
+          />
+          <label>Email</label>
+          <input
+            type="email"
+            id="sender_email"
+            required
+            placeholder="sender@example.com"
+          />
+          <label>Preferred Channels</label>
+          <div class="channels">
+            <label
+              ><input type="checkbox" class="sender_channel" value="whatsapp" />
+              WhatsApp</label
+            >
+            <label
+              ><input type="checkbox" class="sender_channel" value="email" />
+              Email</label
+            >
+            <label
+              ><input type="checkbox" class="sender_channel" value="sms" />
+              SMS</label
+            >
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Receiver Details</h3>
+          <label>Name</label>
+          <input
+            type="text"
+            id="receiver_name"
+            required
+            placeholder="Receiver's name"
+          />
+          <label>Phone</label>
+          <input
+            type="text"
+            id="receiver_phone"
+            required
+            placeholder="+234XXXXXXXXXX"
+          />
+          <label>Email</label>
+          <input
+            type="email"
+            id="receiver_email"
+            required
+            placeholder="receiver@example.com"
+          />
+          <label>Preferred Channels</label>
+          <div class="channels">
+            <label
+              ><input
+                type="checkbox"
+                class="receiver_channel"
+                value="whatsapp"
+              />
+              WhatsApp</label
+            >
+            <label
+              ><input type="checkbox" class="receiver_channel" value="email" />
+              Email</label
+            >
+            <label
+              ><input type="checkbox" class="receiver_channel" value="sms" />
+              SMS</label
+            >
+          </div>
+        </div>
+
+        <button type="submit">Send Payload</button>
+        <div class="response" id="response"></div>
+      </form>
+    </div>
+
+    <script>
+      function generateTrackingNumber() {
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const randomNum = Math.floor(100 + Math.random() * 900);
+        const randomLetters = Array.from(
+          { length: 3 },
+          () => letters[Math.floor(Math.random() * letters.length)]
+        ).join("");
+        return `NIP${randomNum}${randomLetters}`;
+      }
+      document.getElementById("tracking_number").value =
+        generateTrackingNumber();
+
+      document
+        .getElementById("parcelForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          const senderChannels = Array.from(
+            document.querySelectorAll(".sender_channel:checked")
+          ).map((ch) => ch.value);
+          const receiverChannels = Array.from(
+            document.querySelectorAll(".receiver_channel:checked")
+          ).map((ch) => ch.value);
+
+          const data = {
+            payload: {
+              tracking_number: document.getElementById("tracking_number").value,
+              parcel_status: document.getElementById("parcel_status").value,
+              amount: parseFloat(document.getElementById("amount").value),
+              origin_center: document.getElementById("origin_center").value,
+              destination_center:
+                document.getElementById("destination_center").value,
+              sender: {
+                name: document.getElementById("sender_name").value,
+                phone: document.getElementById("sender_phone").value,
+                email: document.getElementById("sender_email").value,
+                preferred_channels: senderChannels,
+              },
+              receiver: {
+                name: document.getElementById("receiver_name").value,
+                phone: document.getElementById("receiver_phone").value,
+                email: document.getElementById("receiver_email").value,
+                preferred_channels: receiverChannels,
+              },
+            },
+          };
+
+          try {
+            const response = await fetch(
+              "https://notification.cyberbridgesoft.com//api/v1/message",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+              }
+            );
+
+            const result = await response.json();
+            document.getElementById(
+              "response"
+            ).innerHTML = `<span style="color:green;">✅ Payload sent successfully!</span><br><pre>${JSON.stringify(
+              result?.status,
+              null,
+              2
+            )}</pre>`;
+          } catch (err) {
+            document.getElementById(
+              "response"
+            ).innerHTML = `<span style="color:red;">❌ Failed to send payload:</span> ${err}`;
+          }
+        });
+    </script>
+  </body>
 </html>
