@@ -17,6 +17,7 @@ metrics_lock = Lock()
 
 # API endpoint
 BASE_URL = "http://localhost:3001/api/v1"
+BASE_URL = "https://notification.cyberbridgesoft.com/api/v1"
 LOGIN_URL = f"{BASE_URL}/admin/auth/login"
 USERS_URL = f"{BASE_URL}/users"
 

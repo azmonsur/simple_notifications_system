@@ -117,6 +117,29 @@ async function gracefulShutdown(app: any, exitCode: number) {
   }
 }
 
+// Dynamic compression level based on CPU load
+function getCompressionLevel() {
+  const cpuUsage = os.loadavg()[0]; // 1-minute average
+  const cpuCount = os.cpus().length;
+  const usage = (cpuUsage / cpuCount) * 100;
+
+  if (usage > 70) return 3; // High load → fast compression
+  if (usage > 40) return 4; // Medium load → balanced
+  return 5; // Low load → better compression
+}
+
+// Dynamic memory level based on usage
+function getDynamicMemLevel() {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const memUsagePercent = ((totalMem - freeMem) / totalMem) * 100;
+
+  if (memUsagePercent > 80) return 5; // High memory pressure
+  if (memUsagePercent > 60) return 6; // Moderate pressure
+  if (memUsagePercent > 40) return 7; // Normal
+  return 8; // Plenty of memory
+}
+
 async function bootstrap() {
   try {
     // Validate environment
@@ -134,13 +157,47 @@ async function bootstrap() {
       bodyParser: false, // We'll configure body-parser manually
     });
 
-    // Get underlying Express instance
-    // Let server know it's behind a proxy (e.g., load balancer) and treat X-Forwarded-* headers as trusted
+    // ✅ CRITICAL: Set trust proxy FIRST, before any rate limiting
+    // This ensures we get the real client IP from X-Forwarded-For headers
     const expressApp = app.getHttpAdapter().getInstance();
-    expressApp.set("trust proxy", 1); // <-- now works
+    expressApp.set("trust proxy", 1);
+
+    // Add this AFTER setting trust proxy
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      // Log IP information for debugging
+      if (process.env.DEBUG_IPS === "true") {
+        logger.warn({
+          path: req.path,
+          ip: req.ip,
+          ips: req.ips,
+          remoteAddress: req.socket.remoteAddress,
+          xForwardedFor: req.headers["x-forwarded-for"],
+          xRealIp: req.headers["x-real-ip"],
+        });
+      }
+      next();
+    });
 
     // Setup error handlers first
     setupErrorHandlers(app);
+
+    // ✅ MOVED: Apply connection limiter early in the middleware chain
+    const connectionLimiter = new ConnectionLimiterMiddleware({
+      maxConnectionsPerIp: parseInt(
+        process.env.MAX_CONNECTIONS_PER_IP || "50",
+        10
+      ),
+      maxConnectionsGlobal: parseInt(
+        process.env.MAX_CONNECTIONS_GLOBAL || "1000",
+        10
+      ),
+    });
+
+    app.use((req: Request, res: Response, next: NextFunction) =>
+      connectionLimiter.use(req, res, next)
+    );
+
+    logger.info("Connection limiter stats:", connectionLimiter.getStats());
 
     // Body parser with size limits
     app.use(
@@ -151,29 +208,6 @@ async function bootstrap() {
         },
       })
     );
-
-    // Dynamic compression level based on CPU load
-    function getCompressionLevel() {
-      const cpuUsage = os.loadavg()[0]; // 1-minute average
-      const cpuCount = os.cpus().length;
-      const usage = (cpuUsage / cpuCount) * 100;
-
-      if (usage > 70) return 3; // High load → fast compression
-      if (usage > 40) return 4; // Medium load → balanced
-      return 5; // Low load → better compression
-    }
-
-    // Dynamic memory level based on usage
-    function getDynamicMemLevel() {
-      const totalMem = os.totalmem();
-      const freeMem = os.freemem();
-      const memUsagePercent = ((totalMem - freeMem) / totalMem) * 100;
-
-      if (memUsagePercent > 80) return 5; // High memory pressure
-      if (memUsagePercent > 60) return 6; // Moderate pressure
-      if (memUsagePercent > 40) return 7; // Normal
-      return 8; // Plenty of memory
-    }
 
     // Compression
     app.use(
@@ -239,19 +273,41 @@ async function bootstrap() {
       })
     );
 
-    // Rate limiting
+    // ✅ FIXED: More reasonable rate limits for load testing
     const rateLimitWindowMs = 15 * 60 * 1000; // 15 minutes
-    const rateLimitMax = isProduction ? 100 : 500; // Stricter in production
+    const rateLimitMax = parseInt(
+      process.env.RATE_LIMIT_MAX || (isProduction ? "100" : "100"),
+      10
+    );
+
+    // Whitelist for load testing
+    const whitelistedIps = (process.env.WHITELISTED_IPS || "")
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean);
 
     app.use(
       rateLimit({
         windowMs: rateLimitWindowMs,
-        max: rateLimitMax,
+        max: (req) => {
+          const ip = req.ip || req.socket.remoteAddress;
+
+          // Unlimited for whitelisted IPs
+          if (whitelistedIps.length > 0 && whitelistedIps.includes(ip || "")) {
+            return 0; // 0 means no limit
+          }
+
+          return rateLimitMax;
+        },
         message: "Too many requests from this IP, please try again later",
         standardHeaders: true,
         legacyHeaders: false,
         // Skip rate limiting for health checks
         skip: (req) => req.path === "/health" || req.path === "/metrics",
+        // ✅ IMPORTANT: Use the real IP from proxy headers
+        keyGenerator: (req) => {
+          return req.ip || req.socket.remoteAddress || "unknown";
+        },
       })
     );
 
@@ -315,7 +371,7 @@ async function bootstrap() {
       })
     );
 
-    // Global prefix for API routes
+    // ✅ Global prefix for API routes (RESTORED)
     app.setGlobalPrefix("api/v1", {
       exclude: ["/health", "/metrics"], // Exclude monitoring endpoints
     });
@@ -323,23 +379,6 @@ async function bootstrap() {
     // Start server
     const port = parseInt(process.env.PORT || "3000", 10);
     const host = process.env.HOST || "0.0.0.0";
-
-    // Per-IP fairness
-    const connectionLimiter = new ConnectionLimiterMiddleware({
-      maxConnectionsPerIp: parseInt(
-        process.env.MAX_CONNECTIONS_PER_IP || "50",
-        10
-      ),
-      maxConnectionsGlobal: parseInt(
-        process.env.MAX_CONNECTIONS_GLOBAL || "1000",
-        10
-      ),
-      // whitelistedIps: (process.env.WHITELISTED_IPS || "127.0.0.1,::1").split(
-      //   ","
-      // ),
-    });
-
-    logger.info("Connection stat", connectionLimiter.getStats());
 
     await app.listen(port, host);
 
@@ -355,18 +394,18 @@ async function bootstrap() {
     // Limit connections per IP
     server.maxConnections = 100; // Max concurrent connections total
 
-    app.use((req: Request, res: Response, next: NextFunction) =>
-      connectionLimiter.use(req, res, next)
-    );
-
     const protocol = false ? "https" : "http"; // httpsOptions ? "https" : "http";
     logger.info(`🚀 Server running on ${protocol}://${host}:${port}`);
     logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
-    // logger.info(`🔒 HTTPS: ${httpsOptions ? "enabled" : "disabled"}`);
+    logger.info(`🔒 HTTPS: disabled`);
     logger.info(
       `🛡️  CSRF: ${process.env.ENABLE_CSRF === "true" ? "enabled" : "disabled"}`
     );
     logger.info(`🌐 CORS: ${allowedOrigins ? "restricted" : "disabled"}`);
+    logger.info(`⏱️  Rate Limit: ${rateLimitMax} requests per 15 minutes`);
+    if (whitelistedIps.length > 0) {
+      logger.info(`✅ Whitelisted IPs: ${whitelistedIps.join(", ")}`);
+    }
 
     // Setup graceful shutdown
     setupGracefulShutdown(app);
