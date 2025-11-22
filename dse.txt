@@ -1,4 +1,8 @@
 {
+  "gen-cookie-secret": `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+  }
+
+{
   "type": "outbound", 
   "receiver":"2348132329187",
   "sender":"CyberBridge",
@@ -16,10 +20,13 @@
   "origid":"3017636638097397161867125",
   "messagestate":"Delivered",
   "notify_id":"3017636638097397161867125"
-  }
+}
 
 
-
+{
+  "email": "admin@example.com",
+  "password": "admin"
+}
 
  [
   {

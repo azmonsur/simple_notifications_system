@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from "@nestjs/common";
 import { DlrAnalyticsService } from "./dlr.analytics.service";
 
-@Controller("api/v1/admin/dlr/analysis")
+@Controller("admin/dlr/analysis")
 export class DlrAnalytcisController {
   constructor(private readonly analysisService: DlrAnalyticsService) {}
 

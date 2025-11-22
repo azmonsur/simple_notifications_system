@@ -4,10 +4,11 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import MessageQueue from "./pages/MessageQueue";
 import FailedMessages from "./pages/FailedMessages";
-import WebhookDLR from "./pages/WebhooDLR";
+import WebhookDLR from "./pages/WebhookDLR";
 import Login from "./pages/Login";
 import { useAuth } from "./utils/auth";
 import NotFound from "./pages/NotFound";
+import LiveMetricsDashboard from "./pages/Metrics";
 
 function Protected({ children }: { children: JSX.Element }) {
   const { token } = useAuth();
@@ -50,7 +51,7 @@ export default function App() {
             path="/queues"
             element={
               <Protected>
-                <MessageQueue />
+                <MessageQueue darkMode={darkMode} />
               </Protected>
             }
           />
@@ -66,7 +67,15 @@ export default function App() {
             path="/webhook-dlr"
             element={
               <Protected>
-                <WebhookDLR />
+                <WebhookDLR darkMode={darkMode} />
+              </Protected>
+            }
+          />
+          <Route
+            path="/metrics"
+            element={
+              <Protected>
+                <LiveMetricsDashboard darkMode={darkMode} />
               </Protected>
             }
           />

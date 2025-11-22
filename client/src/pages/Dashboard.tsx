@@ -422,26 +422,27 @@ export default function Dashboard({
             📊 Analytics Dashboard
           </h1>
           {/* Date filters */}
-          <div className="flex gap-4 mb-6">
-            <div>
-              <label className="block text-gray-600 dark:text-gray-300 text-sm">
+          {/* Date filters */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex flex-col w-full sm:w-auto">
+              <label className="block text-gray-600 dark:text-gray-300 text-sm mb-1">
                 From
               </label>
               <input
                 type="date"
-                className="border rounded px-2 py-1"
+                className="border rounded px-2 py-1 w-full sm:w-auto"
                 max={today}
                 value={from}
                 onChange={(e) => handleFromChange(e.target.value)}
               />
             </div>
-            <div>
-              <label className="block text-gray-600 dark:text-gray-300 text-sm">
+            <div className="flex flex-col w-full sm:w-auto">
+              <label className="block text-gray-600 dark:text-gray-300 text-sm mb-1">
                 To
               </label>
               <input
                 type="date"
-                className="border rounded px-2 py-1"
+                className="border rounded px-2 py-1 w-full sm:w-auto"
                 max={today}
                 value={to}
                 onChange={(e) => handleToChange(e.target.value)}

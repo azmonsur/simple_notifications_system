@@ -3,7 +3,7 @@ import { Request } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { UserService } from "./user.service";
 
-@Controller("api/v1")
+@Controller("")
 export class UserController {
   constructor(private readonly userService: UserService) {}
 

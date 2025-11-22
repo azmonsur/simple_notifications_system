@@ -10,7 +10,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { WebhookModule } from "./modules/webhook/webhook.module";
 import { DlrAnalyticsModule } from "./modules/dlr_analytics/dlr.analytics.module";
 import { AdminModule } from "./admin/admin.module";
-import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard"; // WebhookModule
+import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard";
 
 @Module({
   imports: [

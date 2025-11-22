@@ -14,6 +14,7 @@ import {
   Title,
   Filler,
   TimeScale,
+  ChartOptions,
 } from "chart.js";
 
 ChartJS.register(
@@ -30,10 +31,13 @@ ChartJS.register(
   TimeScale
 );
 
-export default function WebhookDLR() {
+interface WebhookDLRProps {
+  darkMode: boolean; // prop to control dark/light mode
+}
+
+export default function WebhookDLR({ darkMode }: WebhookDLRProps) {
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
-
   const [dlrSummary, setDlrSummary] = useState<any[]>([]);
   const [statusBreakdown, setStatusBreakdown] = useState<any[]>([]);
   const [totalRetries, setTotalRetries] = useState<any[]>([]);
@@ -41,14 +45,11 @@ export default function WebhookDLR() {
   const [channelBreakdown, setChannelBreakdown] = useState<any[]>([]);
   const [successRate, setSuccessRate] = useState<any[]>([]);
   const [dailyTrend, setDailyTrend] = useState<any[]>([]);
-
-  /** NEW **/
   const [providerStatus, setProviderStatus] = useState<any[]>([]);
   const [providerStatusPercent, setProviderStatusPercent] = useState<any[]>([]);
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Fetch DLR analytics
   const fetchDLR = async () => {
     try {
       const query = new URLSearchParams();
@@ -63,8 +64,6 @@ export default function WebhookDLR() {
         channelRes,
         successRes,
         dailyRes,
-
-        /** NEW **/
         providerStatusRes,
         providerStatusPercentRes,
       ] = await Promise.all([
@@ -75,8 +74,6 @@ export default function WebhookDLR() {
         api.get(`dlr/analysis/channel?${query}`),
         api.get(`dlr/analysis/success-rate?${query}`),
         api.get(`dlr/analysis/daily-trend?${query}`),
-
-        /** NEW **/
         api.get(`dlr/analysis/provider-status?${query}`),
         api.get(`dlr/analysis/provider-status-percentage?${query}`),
       ]);
@@ -88,8 +85,6 @@ export default function WebhookDLR() {
       if (channelRes.status === 200) setChannelBreakdown(channelRes.data || []);
       if (successRes.status === 200) setSuccessRate(successRes.data || []);
       if (dailyRes.status === 200) setDailyTrend(dailyRes.data || []);
-
-      /** NEW **/
       if (providerStatusRes.status === 200)
         setProviderStatus(providerStatusRes.data?.data || []);
       if (providerStatusPercentRes.status === 200)
@@ -119,9 +114,12 @@ export default function WebhookDLR() {
     setTo(value);
   };
 
-  // ---------------- EXISTING CHARTS ---------------- //
+  /** Dynamic colors based on darkMode prop */
+  const textColor = darkMode ? "#E5E7EB" : "#1F2937";
+  const gridColor = darkMode ? "#374151" : "#D1D5DB";
+  const cardBg = darkMode ? "bg-gray-800" : "bg-white";
 
-  // Donut chart for status
+  // ---------------- CHART DATA ---------------- //
   const donutData = useMemo(() => {
     const labels = Array.from(new Set(statusBreakdown.map((s) => s.status)));
     const data = labels.map((label) =>
@@ -196,17 +194,12 @@ export default function WebhookDLR() {
     [dailyTrend]
   );
 
-  // ---------------- NEW CHARTS ---------------- //
-
-  /** PROVIDER STATUS (COUNTS) */
   const providerStatusChart = useMemo(() => {
     if (!providerStatus.length) return null;
-
     const providers = Array.from(
       new Set(providerStatus.map((r) => r.provider))
     );
     const statuses = Array.from(new Set(providerStatus.map((r) => r.status)));
-
     const colors = [
       "#3B82F6",
       "#10B981",
@@ -215,32 +208,26 @@ export default function WebhookDLR() {
       "#8B5CF6",
       "#14B8A6",
     ];
-
-    const datasets = statuses.map((status, index) => ({
+    const datasets = statuses.map((status, i) => ({
       label: status,
-      data: providers.map((p) => {
-        const row = providerStatus.find(
-          (r) => r.provider === p && r.status === status
-        );
-        return row ? row.total : 0;
-      }),
-      backgroundColor: colors[index % colors.length],
+      data: providers.map(
+        (p) =>
+          providerStatus.find((r) => r.provider === p && r.status === status)
+            ?.total || 0
+      ),
+      backgroundColor: colors[i % colors.length],
     }));
-
     return { labels: providers, datasets };
   }, [providerStatus]);
 
-  /** PROVIDER STATUS PERCENTAGE */
   const providerPercentChart = useMemo(() => {
     if (!providerStatusPercent.length) return null;
-
     const providers = Array.from(
       new Set(providerStatusPercent.map((r) => r.provider))
     );
     const statuses = Array.from(
       new Set(providerStatusPercent.map((r) => r.status))
     );
-
     const colors = [
       "#3B82F6",
       "#10B981",
@@ -249,170 +236,178 @@ export default function WebhookDLR() {
       "#8B5CF6",
       "#14B8A6",
     ];
-
-    const datasets = statuses.map((status, index) => ({
+    const datasets = statuses.map((status, i) => ({
       label: status,
-      data: providers.map((p) => {
-        const row = providerStatusPercent.find(
-          (r) => r.provider === p && r.status === status
-        );
-        return row ? Number(row.percentage) : 0;
-      }),
-      backgroundColor: colors[index % colors.length],
+      data: providers.map(
+        (p) =>
+          providerStatusPercent.find(
+            (r) => r.provider === p && r.status === status
+          )?.percentage || 0
+      ),
+      backgroundColor: colors[i % colors.length],
       stack: "percent",
     }));
-
     return { labels: providers, datasets };
   }, [providerStatusPercent]);
 
+  // ---------------- CHART OPTIONS ---------------- //
+  const chartOptions: ChartOptions<"line"> &
+    ChartOptions<"bar"> &
+    ChartOptions<"doughnut"> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "bottom", labels: { color: textColor } },
+      title: { display: false },
+    },
+    scales: {
+      x: { ticks: { color: textColor }, grid: { color: gridColor } },
+      y: { ticks: { color: textColor }, grid: { color: gridColor } },
+    },
+  };
+
+  const stackedOptions: ChartOptions<"bar"> = {
+    ...chartOptions,
+    scales: {
+      x: {
+        stacked: true,
+        ticks: { color: textColor },
+        grid: { color: gridColor },
+      },
+      y: {
+        stacked: true,
+        ticks: { color: textColor },
+        grid: { color: gridColor },
+      },
+    },
+  };
+
+  const stackedPercentOptions: ChartOptions<"bar"> = {
+    ...stackedOptions,
+    scales: {
+      ...stackedOptions.scales,
+      y: {
+        stacked: true,
+        max: 100,
+        ticks: { color: textColor },
+        grid: { color: gridColor },
+      },
+    },
+  };
+
+  // ---------------- JSX ---------------- //
   return (
     <div className="flex min-h-screen">
       <main className="flex-1 p-6 pt-2 overflow-auto bg-gray-50 dark:bg-gray-900">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
             📩 Webhook DLR Analytics
           </h1>
-
-          {/* Date filters */}
-          <div className="flex gap-4 mb-6">
-            <div>
-              <label className="block text-gray-600 dark:text-gray-300 text-sm">
+          <div className="flex flex-col sm:flex-row gap-4 mb-6 items-start sm:items-end">
+            <div className="flex flex-col w-full sm:w-auto">
+              <label className="block text-gray-600 dark:text-gray-300 text-sm mb-1">
                 From
               </label>
               <input
                 type="date"
-                className="border rounded px-2 py-1"
+                className="border rounded px-2 py-1 w-full sm:w-auto dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
                 max={today}
                 value={from}
                 onChange={(e) => handleFromChange(e.target.value)}
               />
             </div>
-            <div>
-              <label className="block text-gray-600 dark:text-gray-300 text-sm">
+            <div className="flex flex-col w-full sm:w-auto">
+              <label className="block text-gray-600 dark:text-gray-300 text-sm mb-1">
                 To
               </label>
               <input
                 type="date"
-                className="border rounded px-2 py-1"
+                className="border rounded px-2 py-1 w-full sm:w-auto dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
                 max={today}
                 value={to}
                 onChange={(e) => handleToChange(e.target.value)}
               />
             </div>
+            <button
+              onClick={fetchDLR}
+              className="px-4 py-2 mt-2 sm:mt-0 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition w-full sm:w-auto"
+            >
+              Refresh
+            </button>
           </div>
         </div>
 
-        {/* Date filters */}
-        {/* <div className="flex gap-4 mb-6">
-          <div>
-            <label className="block text-gray-600 dark:text-gray-300 text-sm">
-              From
-            </label>
-            <input
-              type="date"
-              className="border rounded px-2 py-1"
-              max={today}
-              value={from}
-              onChange={(e) => handleFromChange(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-gray-600 dark:text-gray-300 text-sm">
-              To
-            </label>
-            <input
-              type="date"
-              className="border rounded px-2 py-1"
-              max={today}
-              value={to}
-              onChange={(e) => handleToChange(e.target.value)}
-            />
-          </div>
-        </div> */}
-
-        {/* Charts grid */}
+        {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* EXISTING CHARTS (unchanged) */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+          <div className={`${cardBg} p-6 rounded-2xl shadow h-64`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Status Breakdown
             </h3>
             {donutData.labels.length ? (
-              <Doughnut data={donutData as any} />
+              <Doughnut data={donutData as any} options={chartOptions as any} />
             ) : (
               <div className="text-center text-gray-400 py-12">
                 No data available
               </div>
             )}
           </div>
-
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+          <div className={`${cardBg} p-6 rounded-2xl shadow h-64`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Total Messages by Provider
             </h3>
             {barData.labels.length ? (
-              <Bar data={barData as any} />
+              <Bar data={barData as any} options={chartOptions as any} />
             ) : (
               <div className="text-center text-gray-400 py-12">
                 No data available
               </div>
             )}
           </div>
-
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+          <div className={`${cardBg} p-6 rounded-2xl shadow h-64`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Messages by Channel
             </h3>
             {channelData.labels.length ? (
-              <Bar data={channelData as any} />
+              <Bar data={channelData as any} options={chartOptions as any} />
             ) : (
               <div className="text-center text-gray-400 py-12">
                 No data available
               </div>
             )}
           </div>
-
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+          <div className={`${cardBg} p-6 rounded-2xl shadow h-64`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Success Rate
             </h3>
             {successData.labels.length ? (
-              <Line data={successData as any} />
+              <Line data={successData as any} options={chartOptions as any} />
             ) : (
               <div className="text-center text-gray-400 py-12">
                 No data available
               </div>
             )}
           </div>
-
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+          <div className={`${cardBg} p-6 rounded-2xl shadow h-64`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Daily Trend
             </h3>
             {dailyData.labels.length ? (
-              <Line data={dailyData as any} />
+              <Line data={dailyData as any} options={chartOptions as any} />
             ) : (
               <div className="text-center text-gray-400 py-12">
                 No data available
               </div>
             )}
           </div>
-
-          {/* NEW CHARTS */}
-
-          {/* Provider Status Breakdown */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+          <div className={`${cardBg} p-6 rounded-2xl shadow h-64`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Provider Status Breakdown (Counts)
             </h3>
             {providerStatusChart ? (
               <Bar
                 data={providerStatusChart as any}
-                options={{
-                  responsive: true,
-                  plugins: { legend: { position: "bottom" } },
-                  scales: { x: { stacked: true }, y: { stacked: true } },
-                }}
+                options={stackedOptions as any}
               />
             ) : (
               <div className="text-center text-gray-400 py-12">
@@ -420,23 +415,14 @@ export default function WebhookDLR() {
               </div>
             )}
           </div>
-
-          {/* Provider Status Percentage */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+          <div className={`${cardBg} p-6 rounded-2xl shadow h-64`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Provider Status Percentage (%)
             </h3>
             {providerPercentChart ? (
               <Bar
                 data={providerPercentChart as any}
-                options={{
-                  responsive: true,
-                  plugins: { legend: { position: "bottom" } },
-                  scales: {
-                    x: { stacked: true },
-                    y: { stacked: true, max: 100 },
-                  },
-                }}
+                options={stackedPercentOptions as any}
               />
             ) : (
               <div className="text-center text-gray-400 py-12">
@@ -444,13 +430,15 @@ export default function WebhookDLR() {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Retries & Cost */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+        {/* Retries & Cost */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div className={`${cardBg} p-6 rounded-2xl shadow`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Average Retries
             </h3>
-            <ul className="space-y-2">
+            <ul className="space-y-2 dark:text-gray-200">
               {totalRetries.map((r) => (
                 <li key={r.provider} className="flex justify-between">
                   <span>{r.provider}</span>
@@ -459,12 +447,11 @@ export default function WebhookDLR() {
               ))}
             </ul>
           </div>
-
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow">
+          <div className={`${cardBg} p-6 rounded-2xl shadow`}>
             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-200">
               Total Cost (SMS)
             </h3>
-            <ul className="space-y-2">
+            <ul className="space-y-2 dark:text-gray-200">
               {totalCost.map((c) => (
                 <li key={c.provider} className="flex justify-between">
                   <span>{c.provider}</span>

@@ -15,7 +15,7 @@ import { CreateNotificationDto } from "./dto/notifications.dto";
 import { JwtAuthGuard } from "../auth/jwt.guard";
 import { Throttle } from "@nestjs/throttler";
 
-@Controller("api/v1")
+@Controller("")
 export class NotificationsController {
   constructor(private svc: NotificationsService) {}
 
