@@ -254,7 +254,7 @@ export default function WebhookDLR({ darkMode }: WebhookDLRProps) {
   const chartOptions: ChartOptions<"line"> &
     ChartOptions<"bar"> &
     ChartOptions<"doughnut"> = {
-    responsive: true,
+    responsive: false,
     maintainAspectRatio: false,
     plugins: {
       legend: { position: "bottom", labels: { color: textColor } },
@@ -345,7 +345,12 @@ export default function WebhookDLR({ darkMode }: WebhookDLRProps) {
               Status Breakdown
             </h3>
             {donutData.labels.length ? (
-              <Doughnut data={donutData as any} options={chartOptions as any} />
+              <Doughnut
+                data={donutData as any}
+                options={chartOptions as any}
+                height={220}
+                // width={550}
+              />
             ) : (
               <div className="text-center text-gray-400 py-12">
                 No data available

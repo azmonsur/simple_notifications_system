@@ -19,6 +19,28 @@ import { ConnectionLimiterMiddleware } from "./middleware/connection-limiter.mid
 
 dotenv.config();
 
+// ✅ Add this helper function to extract real client IP
+function getClientIp(req: Request): string {
+  // Check X-Forwarded-For header first (most reliable behind proxy)
+  const xForwardedFor = req.headers["x-forwarded-for"];
+  if (xForwardedFor) {
+    if (Array.isArray(xForwardedFor)) {
+      return xForwardedFor[0].split(",")[0].trim();
+    }
+    return xForwardedFor.split(",")[0].trim();
+  }
+
+  // Fall back to other headers
+  const xRealIp = req.headers["x-real-ip"];
+  if (xRealIp) {
+    if (Array.isArray(xRealIp)) return xRealIp[0];
+    return xRealIp;
+  }
+
+  // Fall back to connection remote address
+  return req.ip || req.socket.remoteAddress || "unknown";
+}
+
 // Environment validation
 function validateEnvironment() {
   const required = ["NODE_ENV"];
@@ -166,14 +188,20 @@ async function bootstrap() {
     app.use((req: Request, res: Response, next: NextFunction) => {
       // Log IP information for debugging
       if (process.env.DEBUG_IPS === "true") {
+        const clientIp = getClientIp(req);
         logger.warn({
           path: req.path,
-          ip: req.ip,
+          clientIp: clientIp, // Real client IP
+          appIp: req.ip, // App's perceived IP (load balancer)
           ips: req.ips,
           remoteAddress: req.socket.remoteAddress,
           xForwardedFor: req.headers["x-forwarded-for"],
           xRealIp: req.headers["x-real-ip"],
         });
+
+        // Add client IP to response headers for debugging
+        res.set("X-Client-IP", clientIp);
+        res.set("X-App-IP", req.ip);
       }
       next();
     });
@@ -193,9 +221,11 @@ async function bootstrap() {
       ),
     });
 
-    app.use((req: Request, res: Response, next: NextFunction) =>
-      connectionLimiter.use(req, res, next)
-    );
+    if (process.env.LOAD_TESTING_MODE !== "true") {
+      app.use((req: Request, res: Response, next: NextFunction) =>
+        connectionLimiter.use(req, res, next)
+      );
+    }
 
     logger.info("Connection limiter stats:", connectionLimiter.getStats());
 
@@ -273,7 +303,7 @@ async function bootstrap() {
       })
     );
 
-    // ✅ FIXED: More reasonable rate limits for load testing
+    // ✅ FIXED: Rate limiting with proper client IP detection
     const rateLimitWindowMs = 15 * 60 * 1000; // 15 minutes
     const rateLimitMax = parseInt(
       process.env.RATE_LIMIT_MAX || (isProduction ? "100" : "100"),
@@ -286,30 +316,44 @@ async function bootstrap() {
       .map((ip) => ip.trim())
       .filter(Boolean);
 
-    app.use(
-      rateLimit({
-        windowMs: rateLimitWindowMs,
-        max: (req) => {
-          const ip = req.ip || req.socket.remoteAddress;
+    if (process.env.LOAD_TESTING_MODE === "true") {
+      app.use((req: Request, res: Response, next: NextFunction) => {
+        // Disable logging
+        console.log = () => {};
+        next();
+      });
+    } else {
+      app.use(
+        rateLimit({
+          windowMs: rateLimitWindowMs,
+          max: (req) => {
+            const clientIp = getClientIp(req);
 
-          // Unlimited for whitelisted IPs
-          if (whitelistedIps.length > 0 && whitelistedIps.includes(ip || "")) {
-            return 0; // 0 means no limit
-          }
+            // Unlimited for whitelisted IPs
+            if (
+              whitelistedIps.length > 0 &&
+              whitelistedIps.includes(clientIp)
+            ) {
+              return Infinity; // 0 means no limit
+            }
 
-          return rateLimitMax;
-        },
-        message: "Too many requests from this IP, please try again later",
-        standardHeaders: true,
-        legacyHeaders: false,
-        // Skip rate limiting for health checks
-        skip: (req) => req.path === "/health" || req.path === "/metrics",
-        // ✅ IMPORTANT: Use the real IP from proxy headers
-        keyGenerator: (req) => {
-          return req.ip || req.socket.remoteAddress || "unknown";
-        },
-      })
-    );
+            return rateLimitMax;
+          },
+          message: {
+            error: "Too many requests from this IP, please try again later",
+            retryAfter: Math.ceil(rateLimitWindowMs / 1000 / 60) + " minutes",
+          },
+          standardHeaders: true, // Send `RateLimit-*` headers
+          legacyHeaders: false, // Disable `X-RateLimit-*` headers
+          // Skip rate limiting for health checks
+          skip: (req) => req.path === "/health" || req.path === "/metrics",
+          // ✅ CRITICAL: Use the real client IP
+          keyGenerator: (req) => {
+            return getClientIp(req);
+          },
+        })
+      );
+    }
 
     // CSRF protection (only in production with proper configuration)
     if (isProduction && process.env.ENABLE_CSRF === "true") {

@@ -17,7 +17,7 @@ metrics_lock = Lock()
 
 # API endpoint
 BASE_URL = "http://localhost:3001/api/v1"
-BASE_URL = "https://notification.cyberbridgesoft.com/api/v1"
+# BASE_URL = "https://notification.cyberbridgesoft.com/api/v1"
 LOGIN_URL = f"{BASE_URL}/admin/auth/login"
 USERS_URL = f"{BASE_URL}/users"
 
@@ -69,7 +69,7 @@ def send_user_creation_request(_):
     """Send user creation request"""
     first_name, last_name = random_name()
     data = {
-        "username": random_username(),
+        "username": f"u{int(time.time()*1000000)}{random_username()}",
         "first_name": first_name,
         "last_name": last_name,
         "age": random_age(),

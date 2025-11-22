@@ -7,7 +7,7 @@ import { UserService } from "./user.service";
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @Throttle({ default: { limit: 20, ttl: 60 } }) // max 20 requests per IP per 60 seconds
+  // @Throttle({ default: { limit: 20, ttl: 60 } }) // max 20 requests per IP per 60 seconds
   @Post("users")
   async createUser(
     @Body()
