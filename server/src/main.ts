@@ -183,6 +183,19 @@ async function bootstrap() {
     const expressApp = app.getHttpAdapter().getInstance();
     expressApp.set("trust proxy", 1);
 
+    expressApp.options("*", (req: Request, res: Response) => {
+      res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+      res.setHeader(
+        "Access-Control-Allow-Methods",
+        "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+      );
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization"
+      );
+      res.status(204).send();
+    });
+
     // Add this AFTER setting trust proxy
     app.use((req: Request, res: Response, next: NextFunction) => {
       // Log IP information for debugging
@@ -267,41 +280,6 @@ async function bootstrap() {
 
     // Cookie parser (required for CSRF)
     app.use(cookieParser(process.env.COOKIE_SECRET));
-
-    // Security headers
-    app.use(
-      helmet({
-        contentSecurityPolicy: {
-          directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles if needed
-            imgSrc: ["'self'", "data:", "https:"],
-            // connectSrc: ["'self'"],
-            fontSrc: ["'self'"],
-            objectSrc: ["'none'"],
-            mediaSrc: ["'self'"],
-            frameSrc: ["'none'"],
-            connectSrc: [
-              "'self'",
-              "https://api.yoursite.com", // Your API
-              "wss://api.yoursite.com", // WebSockets if needed
-            ],
-          },
-        },
-        crossOriginEmbedderPolicy: true,
-        crossOriginOpenerPolicy: { policy: "same-origin" },
-        crossOriginResourcePolicy: { policy: "same-origin" },
-        hsts: {
-          maxAge: 31536000,
-          includeSubDomains: true,
-          preload: true,
-        },
-        referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-        noSniff: true,
-        xssFilter: true,
-      })
-    );
 
     // ✅ FIXED: Rate limiting with proper client IP detection
     const rateLimitWindowMs = 15 * 60 * 1000; // 15 minutes
@@ -396,10 +374,46 @@ async function bootstrap() {
         allowedHeaders: ["Authorization", "Content-Type", "X-CSRF-Token"],
         credentials: true,
         maxAge: 3600,
+        preflightContinue: false,
       });
     } else {
       logger.warn("CORS is disabled - no ALLOWED_ORIGINS configured");
     }
+
+    // Security headers
+    app.use(
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles if needed
+            imgSrc: ["'self'", "data:", "https:"],
+            // connectSrc: ["'self'"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            mediaSrc: ["'self'"],
+            frameSrc: ["'none'"],
+            connectSrc: [
+              "'self'",
+              "https://api.yoursite.com", // Your API
+              "wss://api.yoursite.com", // WebSockets if needed
+            ],
+          },
+        },
+        crossOriginEmbedderPolicy: true,
+        crossOriginOpenerPolicy: { policy: "same-origin" },
+        crossOriginResourcePolicy: { policy: "same-origin" },
+        hsts: {
+          maxAge: 31536000,
+          includeSubDomains: true,
+          preload: true,
+        },
+        referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+        noSniff: true,
+        xssFilter: true,
+      })
+    );
 
     // Global validation pipe
     app.useGlobalPipes(
