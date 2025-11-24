@@ -10,7 +10,7 @@ import { Request, Response, NextFunction } from "express";
 export class ApiKeyMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     const apiKey = process.env.NIPOST_API_KEY; // always read at runtime
-    const authHeader = req.headers["authorization"]!;
+    const authHeader = req.headers["authorization"] || "";
 
     const token = authHeader.replace("Bearer ", "").trim();
     const clientIp = req.ip || req.connection.remoteAddress;
