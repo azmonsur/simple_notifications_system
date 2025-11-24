@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, MiddlewareConsumer, NestModule } from "@nestjs/common";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { PrometheusModule } from "@willsoto/nestjs-prometheus";
@@ -11,6 +11,7 @@ import { WebhookModule } from "./modules/webhook/webhook.module";
 import { DlrAnalyticsModule } from "./modules/dlr_analytics/dlr.analytics.module";
 import { AdminModule } from "./admin/admin.module";
 import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard";
+import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
 
 @Module({
   imports: [
@@ -40,4 +41,9 @@ import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard";
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // ✅ Apply API key middleware only for notifications routes
+    consumer.apply(ApiKeyMiddleware).forRoutes("api/v1/notification"); // <-- adjust path if different
+  }
+}

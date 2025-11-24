@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NIPOST SNS Simulator</title>
     <style>
+      /* Same styles as before */
       * {
         box-sizing: border-box;
       }
@@ -117,13 +118,20 @@
     <div class="container">
       <h2>Parcel Payload Submission</h2>
       <form id="parcelForm">
+        <label>API Key</label>
+        <input
+          type="password"
+          id="api_key"
+          placeholder="Enter your API key"
+          required
+        />
+
         <label>Tracking Number</label>
         <input type="text" id="tracking_number" required />
 
         <label>Parcel Status</label>
         <select id="parcel_status" required>
-          <option value="">--Select Status--</option>
-          <option value="pending">Pending</option>
+          <option value="pending" selected>Pending</option>
           <option value="dispatched">Dispatched</option>
           <option value="arrived">Arrived</option>
           <option value="received">Received</option>
@@ -131,51 +139,41 @@
         </select>
 
         <label>Amount</label>
-        <input type="number" id="amount" required placeholder="e.g. 1000" />
+        <input type="number" id="amount" value="1000" required />
 
         <label>Origin Center</label>
-        <input
-          type="text"
-          id="origin_center"
-          required
-          placeholder="e.g. Abuja office"
-        />
+        <input type="text" id="origin_center" value="Abuja office" required />
 
         <label>Destination Center</label>
         <input
           type="text"
           id="destination_center"
+          value="Lagos office"
           required
-          placeholder="e.g. Lagos office"
         />
 
         <div class="section">
           <h3>Sender Details</h3>
           <label>Name</label>
-          <input
-            type="text"
-            id="sender_name"
-            required
-            placeholder="Sender's name"
-          />
+          <input type="text" id="sender_name" value="John Doe" required />
           <label>Phone</label>
           <input
             type="text"
             id="sender_phone"
+            value="+2348012345678"
             required
-            placeholder="+234XXXXXXXXXX"
           />
           <label>Email</label>
-          <input
-            type="email"
-            id="sender_email"
-            required
-            placeholder="sender@example.com"
-          />
+          <input type="email" id="sender_email" value="a@gmail.com" required />
           <label>Preferred Channels</label>
           <div class="channels">
             <label
-              ><input type="checkbox" class="sender_channel" value="whatsapp" />
+              ><input
+                type="checkbox"
+                class="sender_channel"
+                value="whatsapp"
+                checked
+              />
               WhatsApp</label
             >
             <label
@@ -192,25 +190,20 @@
         <div class="section">
           <h3>Receiver Details</h3>
           <label>Name</label>
-          <input
-            type="text"
-            id="receiver_name"
-            required
-            placeholder="Receiver's name"
-          />
+          <input type="text" id="receiver_name" value="Jane Smith" required />
           <label>Phone</label>
           <input
             type="text"
             id="receiver_phone"
+            value="+2348098765432"
             required
-            placeholder="+234XXXXXXXXXX"
           />
           <label>Email</label>
           <input
             type="email"
             id="receiver_email"
+            value="b@gmail.com"
             required
-            placeholder="receiver@example.com"
           />
           <label>Preferred Channels</label>
           <div class="channels">
@@ -219,6 +212,7 @@
                 type="checkbox"
                 class="receiver_channel"
                 value="whatsapp"
+                checked
               />
               WhatsApp</label
             >
@@ -239,6 +233,7 @@
     </div>
 
     <script>
+      // Auto-generate tracking number on each page load
       function generateTrackingNumber() {
         const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         const randomNum = Math.floor(100 + Math.random() * 900);
@@ -246,8 +241,11 @@
           { length: 3 },
           () => letters[Math.floor(Math.random() * letters.length)]
         ).join("");
+
         return `NIP${randomNum}${randomLetters}`;
       }
+
+      // Set tracking number immediately after page loads
       document.getElementById("tracking_number").value =
         generateTrackingNumber();
 
@@ -259,9 +257,12 @@
           const senderChannels = Array.from(
             document.querySelectorAll(".sender_channel:checked")
           ).map((ch) => ch.value);
+
           const receiverChannels = Array.from(
             document.querySelectorAll(".receiver_channel:checked")
           ).map((ch) => ch.value);
+
+          const apiKey = document.getElementById("api_key").value.trim();
 
           const data = {
             payload: {
@@ -288,10 +289,13 @@
 
           try {
             const response = await fetch(
-              "http://localhost:3001/api/v1/message",
+              "http://localhost:3001/api/v1/notification",
               {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${apiKey}`,
+                },
                 body: JSON.stringify(data),
               }
             );
@@ -300,7 +304,7 @@
             document.getElementById(
               "response"
             ).innerHTML = `<span style="color:green;">✅ Payload sent successfully!</span><br><pre>${JSON.stringify(
-              result?.status,
+              result,
               null,
               2
             )}</pre>`;

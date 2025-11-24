@@ -20,7 +20,7 @@ export class NotificationsController {
   constructor(private svc: NotificationsService) {}
 
   @Throttle({ default: { limit: 300, ttl: 60 } }) // max 50 requests per IP per 60 seconds
-  @Post("message")
+  @Post("notification")
   async webhook(@Body() event: CreateNotificationDto, @Req() req: Request) {
     const ip = req.ip;
     await this.svc.createFromEvent(event, ip as unknown as string);

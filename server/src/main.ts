@@ -2,7 +2,6 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
 import { json } from "body-parser";
-import * as dotenv from "dotenv";
 import { Request, Response, NextFunction } from "express";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
@@ -15,8 +14,10 @@ import os from "os";
 import { AppModule } from "./app.module";
 import { logger } from "./utils/logger";
 import { MetricsMiddleware } from "./middleware/metrics.middleware";
+import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
 import { ConnectionLimiterMiddleware } from "./middleware/connection-limiter.middleware";
 
+import * as dotenv from "dotenv";
 dotenv.config();
 
 // ✅ Add this helper function to extract real client IP
@@ -168,15 +169,13 @@ async function bootstrap() {
     validateEnvironment();
 
     const isProduction = process.env.NODE_ENV === "production";
-    // const httpsOptions = isProduction ? getHttpsOptions() : undefined;
+    const httpsOptions = isProduction ? getHttpsOptions() : undefined;
 
     // Create NestJS application
     const app = await NestFactory.create(AppModule, {
-      logger: isProduction
-        ? ["error", "warn"]
-        : ["error", "warn", "log", "debug"],
+      logger: isProduction ? ["error", "warn"] : false,
       // httpsOptions,
-      bodyParser: false, // We'll configure body-parser manually
+      bodyParser: false,
     });
 
     // ✅ CRITICAL: Set trust proxy FIRST, before any rate limiting
@@ -189,7 +188,7 @@ async function bootstrap() {
       // Log IP information for debugging
       if (process.env.DEBUG_IPS === "true") {
         const clientIp = getClientIp(req);
-        logger.warn({
+        logger.info({
           path: req.path,
           clientIp: clientIp, // Real client IP
           appIp: req.ip, // App's perceived IP (load balancer)
@@ -225,9 +224,9 @@ async function bootstrap() {
       app.use((req: Request, res: Response, next: NextFunction) =>
         connectionLimiter.use(req, res, next)
       );
-    }
 
-    logger.info("Connection limiter stats:", connectionLimiter.getStats());
+      logger.info("Connection limiter stats:", connectionLimiter.getStats());
+    }
 
     // Body parser with size limits
     app.use(
@@ -264,6 +263,7 @@ async function bootstrap() {
 
     // Metrics middleware
     app.use(new MetricsMiddleware().use);
+    app.use(new ApiKeyMiddleware().use);
 
     // Cookie parser (required for CSRF)
     app.use(cookieParser(process.env.COOKIE_SECRET));
@@ -439,16 +439,18 @@ async function bootstrap() {
     server.maxConnections = 100; // Max concurrent connections total
 
     const protocol = false ? "https" : "http"; // httpsOptions ? "https" : "http";
-    logger.info(`🚀 Server running on ${protocol}://${host}:${port}`);
-    logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
-    logger.info(`🔒 HTTPS: disabled`);
     logger.info(
-      `🛡️  CSRF: ${process.env.ENABLE_CSRF === "true" ? "enabled" : "disabled"}`
+      `🚀 Server running on ${protocol}://${host}:${port} in ${process.env.NODE_ENV} mode`
     );
-    logger.info(`🌐 CORS: ${allowedOrigins ? "restricted" : "disabled"}`);
-    logger.info(`⏱️  Rate Limit: ${rateLimitMax} requests per 15 minutes`);
+
+    // logger.info(`🔒 HTTPS: disabled`);
+    // logger.info(
+    //   `🛡️  CSRF: ${process.env.ENABLE_CSRF === "true" ? "enabled" : "disabled"}`
+    // );
+    // logger.info(`🌐 CORS: ${allowedOrigins ? "restricted" : "disabled"}`);
+    // logger.info(`⏱️  Rate Limit: ${rateLimitMax} requests per 15 minutes`);
     if (whitelistedIps.length > 0) {
-      logger.info(`✅ Whitelisted IPs: ${whitelistedIps.join(", ")}`);
+      // logger.info(`✅ Whitelisted IPs: ${whitelistedIps.join(", ")}`);
     }
 
     // Setup graceful shutdown
