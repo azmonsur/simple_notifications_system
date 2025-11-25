@@ -5,6 +5,7 @@ import {
   ConflictException,
   HttpException,
   NotFoundException,
+  BadRequestException,
 } from "@nestjs/common";
 
 import { QueryResult, PoolClient } from "pg";
@@ -66,6 +67,15 @@ export class NotificationsService {
       receiver,
     } = event.payload;
 
+    if (
+      (!sender.phone && !sender.email) ||
+      (!receiver.phone && !receiver.email)
+    ) {
+      throw new BadRequestException(
+        "Sender and receiver must have at least one contact method (phone or email)"
+      );
+    }
+
     try {
       await this.withTransaction(async (client) => {
         // --- Upsert parcel
@@ -116,7 +126,7 @@ export class NotificationsService {
         if (
           existingStatuses
             .map((status) => status.toLowerCase())
-            .includes(parcel_status)
+            .includes(parcel_status.toLocaleLowerCase())
         ) {
           console.log(
             `ℹ️ Status "${parcel_status}" already exists for parcel ${tracking_number}. Skipping history & notifications.`

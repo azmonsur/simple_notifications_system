@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDLRDelayed } from "../../../utils/rabbitmq";
+import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
 import { query } from "../../../utils/db";
 import { logger } from "../../../utils/logger";
 
@@ -79,12 +79,14 @@ export class TermiiDlrWorkerService implements OnModuleInit, OnModuleDestroy {
       if (attempt < this.MAX_RETRIES) {
         const delay = this.BASE_DELAY * 2 ** (attempt - 1);
 
-        // send to delayed queue with incremented attempt
-        await publishDLRDelayed("termii", payload, delay, attempt + 1);
+        // ✅ Use bucket-based retry instead of publishDLRDelayed
+        payload.attempts = attempt + 1;
+        payload.channel = "sms"; // specify channel for bucket system
+        await publishDeliveryToBucket(payload.channel, payload, attempt + 1);
 
         this.safeAck(msg);
         logger.info(
-          `♻️ Termii DLR scheduled retry #${attempt + 1} in ${delay}ms`
+          `♻️ Termii DLR scheduled retry #${attempt + 1} via bucket system`
         );
       } else {
         this.safeNack(msg, false, false);

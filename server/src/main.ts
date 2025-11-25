@@ -173,7 +173,9 @@ async function bootstrap() {
 
     // Create NestJS application
     const app = await NestFactory.create(AppModule, {
-      logger: isProduction ? ["error", "warn"] : false,
+      logger: isProduction
+        ? ["error", "warn"]
+        : ["error", "warn", "log", "debug"],
       // httpsOptions,
       bodyParser: false,
     });
@@ -183,43 +185,66 @@ async function bootstrap() {
     const expressApp = app.getHttpAdapter().getInstance();
     expressApp.set("trust proxy", 1);
 
-    expressApp.options("*", (req: Request, res: Response) => {
-      res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-      res.setHeader(
-        "Access-Control-Allow-Methods",
-        "GET,POST,PUT,DELETE,PATCH,OPTIONS"
-      );
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type, Authorization"
-      );
-      res.status(204).send();
-    });
+    // Security headers
+    app.use(
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles if needed
+            imgSrc: ["'self'", "data:", "https:"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            mediaSrc: ["'self'"],
+            frameSrc: ["'none'"],
+            connectSrc: [
+              "'self'",
+              "https://api.yoursite.com", // Your API
+              "wss://api.yoursite.com", // WebSockets if needed
+            ],
+          },
+        },
+        crossOriginEmbedderPolicy: true,
+        crossOriginOpenerPolicy: { policy: "same-origin" },
+        crossOriginResourcePolicy: { policy: "same-origin" },
+        hsts: {
+          maxAge: 31536000,
+          includeSubDomains: true,
+          preload: true,
+        },
+        referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+        noSniff: true,
+        xssFilter: true,
+      })
+    );
 
-    // Add this AFTER setting trust proxy
-    app.use((req: Request, res: Response, next: NextFunction) => {
-      // Log IP information for debugging
-      if (process.env.DEBUG_IPS === "true") {
-        const clientIp = getClientIp(req);
-        logger.info({
-          path: req.path,
-          clientIp: clientIp, // Real client IP
-          appIp: req.ip, // App's perceived IP (load balancer)
-          ips: req.ips,
-          remoteAddress: req.socket.remoteAddress,
-          xForwardedFor: req.headers["x-forwarded-for"],
-          xRealIp: req.headers["x-real-ip"],
-        });
+    // CORS configuration
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map((o) =>
+      o.trim()
+    );
 
-        // Add client IP to response headers for debugging
-        res.set("X-Client-IP", clientIp);
-        res.set("X-App-IP", req.ip);
-      }
-      next();
-    });
+    if (allowedOrigins && allowedOrigins.length > 0) {
+      app.enableCors({
+        origin: (origin, callback) => {
+          // Allow requests with no origin (mobile apps, curl, etc.)
+          if (!origin) return callback(null, true);
 
-    // Setup error handlers first
-    setupErrorHandlers(app);
+          if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+          } else {
+            callback(new Error("Not allowed by CORS"));
+          }
+        },
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+        allowedHeaders: ["Authorization", "Content-Type", "X-CSRF-Token"],
+        credentials: true,
+        maxAge: 3600,
+        preflightContinue: false,
+      });
+    } else {
+      logger.warn("CORS is disabled - no ALLOWED_ORIGINS configured");
+    }
 
     // ✅ MOVED: Apply connection limiter early in the middleware chain
     const connectionLimiter = new ConnectionLimiterMiddleware({
@@ -239,6 +264,53 @@ async function bootstrap() {
       );
 
       logger.info("Connection limiter stats:", connectionLimiter.getStats());
+    }
+
+    // ✅ FIXED: Rate limiting with proper client IP detection
+    const rateLimitWindowMs = 15 * 60 * 1000; // 15 minutes
+    const rateLimitMax = parseInt(
+      process.env.RATE_LIMIT_MAX || (isProduction ? "100" : "100"),
+      10
+    );
+
+    // Whitelist for load testing
+    const whitelistedIps = (process.env.WHITELISTED_IPS || "")
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean);
+
+    if (process.env.LOAD_TESTING_MODE === "true") {
+    } else {
+      app.use(
+        rateLimit({
+          windowMs: rateLimitWindowMs,
+          max: (req) => {
+            const clientIp = getClientIp(req);
+
+            // Unlimited for whitelisted IPs
+            if (
+              whitelistedIps.length > 0 &&
+              whitelistedIps.includes(clientIp)
+            ) {
+              return Infinity; // 0 means no limit
+            }
+
+            return rateLimitMax;
+          },
+          message: {
+            error: "Too many requests from this IP, please try again later",
+            retryAfter: Math.ceil(rateLimitWindowMs / 1000 / 60) + " minutes",
+          },
+          standardHeaders: true, // Send `RateLimit-*` headers
+          legacyHeaders: false, // Disable `X-RateLimit-*` headers
+          // Skip rate limiting for health checks
+          skip: (req) => req.path === "/health" || req.path === "/metrics",
+          // ✅ CRITICAL: Use the real client IP
+          keyGenerator: (req) => {
+            return getClientIp(req);
+          },
+        })
+      );
     }
 
     // Body parser with size limits
@@ -274,64 +346,37 @@ async function bootstrap() {
       })
     );
 
+    // Add this AFTER setting trust proxy
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      // Log IP information for debugging
+      if (process.env.DEBUG_IPS === "true") {
+        const clientIp = getClientIp(req);
+        logger.info({
+          path: req.path,
+          clientIp: clientIp, // Real client IP
+          appIp: req.ip, // App's perceived IP (load balancer)
+          ips: req.ips,
+          remoteAddress: req.socket.remoteAddress,
+          xForwardedFor: req.headers["x-forwarded-for"],
+          xRealIp: req.headers["x-real-ip"],
+        });
+
+        // Add client IP to response headers for debugging
+        res.set("X-Client-IP", clientIp);
+        res.set("X-App-IP", req.ip);
+      }
+      next();
+    });
+
+    // Setup error handlers first
+    setupErrorHandlers(app);
+
     // Metrics middleware
     app.use(new MetricsMiddleware().use);
-    app.use(new ApiKeyMiddleware().use);
+    // app.use(new ApiKeyMiddleware().use);
 
     // Cookie parser (required for CSRF)
     app.use(cookieParser(process.env.COOKIE_SECRET));
-
-    // ✅ FIXED: Rate limiting with proper client IP detection
-    const rateLimitWindowMs = 15 * 60 * 1000; // 15 minutes
-    const rateLimitMax = parseInt(
-      process.env.RATE_LIMIT_MAX || (isProduction ? "100" : "100"),
-      10
-    );
-
-    // Whitelist for load testing
-    const whitelistedIps = (process.env.WHITELISTED_IPS || "")
-      .split(",")
-      .map((ip) => ip.trim())
-      .filter(Boolean);
-
-    if (process.env.LOAD_TESTING_MODE === "true") {
-      app.use((req: Request, res: Response, next: NextFunction) => {
-        // Disable logging
-        console.log = () => {};
-        next();
-      });
-    } else {
-      app.use(
-        rateLimit({
-          windowMs: rateLimitWindowMs,
-          max: (req) => {
-            const clientIp = getClientIp(req);
-
-            // Unlimited for whitelisted IPs
-            if (
-              whitelistedIps.length > 0 &&
-              whitelistedIps.includes(clientIp)
-            ) {
-              return Infinity; // 0 means no limit
-            }
-
-            return rateLimitMax;
-          },
-          message: {
-            error: "Too many requests from this IP, please try again later",
-            retryAfter: Math.ceil(rateLimitWindowMs / 1000 / 60) + " minutes",
-          },
-          standardHeaders: true, // Send `RateLimit-*` headers
-          legacyHeaders: false, // Disable `X-RateLimit-*` headers
-          // Skip rate limiting for health checks
-          skip: (req) => req.path === "/health" || req.path === "/metrics",
-          // ✅ CRITICAL: Use the real client IP
-          keyGenerator: (req) => {
-            return getClientIp(req);
-          },
-        })
-      );
-    }
 
     // CSRF protection (only in production with proper configuration)
     if (isProduction && process.env.ENABLE_CSRF === "true") {
@@ -353,68 +398,6 @@ async function bootstrap() {
       });
     }
 
-    // CORS configuration
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map((o) =>
-      o.trim()
-    );
-
-    if (allowedOrigins && allowedOrigins.length > 0) {
-      app.enableCors({
-        origin: (origin, callback) => {
-          // Allow requests with no origin (mobile apps, curl, etc.)
-          if (!origin) return callback(null, true);
-
-          if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-          } else {
-            callback(new Error("Not allowed by CORS"));
-          }
-        },
-        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-        allowedHeaders: ["Authorization", "Content-Type", "X-CSRF-Token"],
-        credentials: true,
-        maxAge: 3600,
-        preflightContinue: false,
-      });
-    } else {
-      logger.warn("CORS is disabled - no ALLOWED_ORIGINS configured");
-    }
-
-    // Security headers
-    app.use(
-      helmet({
-        contentSecurityPolicy: {
-          directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles if needed
-            imgSrc: ["'self'", "data:", "https:"],
-            // connectSrc: ["'self'"],
-            fontSrc: ["'self'"],
-            objectSrc: ["'none'"],
-            mediaSrc: ["'self'"],
-            frameSrc: ["'none'"],
-            connectSrc: [
-              "'self'",
-              "https://api.yoursite.com", // Your API
-              "wss://api.yoursite.com", // WebSockets if needed
-            ],
-          },
-        },
-        crossOriginEmbedderPolicy: true,
-        crossOriginOpenerPolicy: { policy: "same-origin" },
-        crossOriginResourcePolicy: { policy: "same-origin" },
-        hsts: {
-          maxAge: 31536000,
-          includeSubDomains: true,
-          preload: true,
-        },
-        referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-        noSniff: true,
-        xssFilter: true,
-      })
-    );
-
     // Global validation pipe
     app.useGlobalPipes(
       new ValidationPipe({
@@ -435,7 +418,7 @@ async function bootstrap() {
     });
 
     // Start server
-    const port = parseInt(process.env.PORT || "3000", 10);
+    const port = parseInt(process.env.PORT || "3001", 10);
     const host = process.env.HOST || "0.0.0.0";
 
     await app.listen(port, host);

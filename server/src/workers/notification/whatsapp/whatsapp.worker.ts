@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDeliveryDelayed } from "../../../utils/rabbitmq";
+import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
 import { logger } from "../../../utils/logger";
 import SendWhatsAppCloud from "../../../helpers/sendWhatsappCloud";
 import { query as dbQuery } from "../../../utils/db";
@@ -22,6 +22,7 @@ interface WhatsAppJob {
   recipient: Recipient;
   template_vars: TemplateVars;
   attempts?: number;
+  channel?: string;
 }
 
 // --- RabbitMQ Message ---
@@ -36,7 +37,6 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly queueName = "notifications.whatsapp";
   private readonly maxRetries = 3;
   private readonly prefetchCount = 5;
-  private readonly retryBackoffMinutes = [30, 120, 360]; // progressive backoff
 
   private channel: any = null; // keep as amqplib Channel
 
@@ -159,28 +159,23 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
       await this.markRetry(job, nextAttempts, err, "WhatsApp API error");
     }
 
-    // Retry logic
+    // ✅ Bucket-based retry logic
     if (nextAttempts > this.maxRetries) {
       await this.markFailed(job.notif_id, "Max retries reached");
       this.channel.nack(msg, false, false);
       return;
     }
 
-    const backoffMinutes =
-      this.retryBackoffMinutes[nextAttempts - 1] ??
-      this.retryBackoffMinutes[this.retryBackoffMinutes.length - 1];
-    const retryDelayMs = backoffMinutes * 60 * 1000;
-
     job.attempts = nextAttempts;
-    await publishDeliveryDelayed(job, retryDelayMs);
+    job.channel = "whatsapp"; // specify channel for bucket system
+    await publishDeliveryToBucket(job.channel, job, nextAttempts);
 
     this.channel.ack(msg);
     logger.warn(
       JSON.stringify({
         notif_id: job.notif_id,
         attempts: nextAttempts,
-        retryDelayMs,
-        reason: "Scheduled WhatsApp retry",
+        reason: "Scheduled WhatsApp retry via bucket system",
       })
     );
   }

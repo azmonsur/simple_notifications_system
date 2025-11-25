@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDLRDelayed } from "../../../utils/rabbitmq";
+import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
 import { query } from "../../../utils/db";
 import { logger } from "../../../utils/logger";
 
@@ -78,12 +78,14 @@ export class SendGridDlrWorkerService implements OnModuleInit, OnModuleDestroy {
       if (attempt < this.MAX_RETRIES) {
         const delay = this.BASE_DELAY * 2 ** (attempt - 1);
 
-        // increment attempt when publishing to delayed queue
-        await publishDLRDelayed("sendgrid", payload, delay, attempt + 1);
+        // ✅ Use bucket-based retry instead of publishDLRDelayed
+        payload.attempts = attempt + 1;
+        payload.channel = "email"; // specify channel for bucket system
+        await publishDeliveryToBucket(payload.channel, payload, attempt + 1);
 
         this.safeAck(msg);
         logger.info(
-          `♻️ SendGrid DLR scheduled retry #${attempt + 1} in ${delay}ms`
+          `♻️ SendGrid DLR scheduled retry #${attempt + 1} via bucket system`
         );
       } else {
         this.safeNack(msg, false, false);

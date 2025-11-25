@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
     delivered_at TIMESTAMP WITH TIME ZONE, -- optional: when message was delivered
     retries INT DEFAULT 0,                 -- number of retry attempts (if using DLQ)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT webhook_logs_provider_message_unique UNIQUE (provider, message_id)
 );
 
 -- For fast lookup by provider + message_id

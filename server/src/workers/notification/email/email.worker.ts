@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDeliveryDelayed } from "../../../utils/rabbitmq";
+import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
 import { logger } from "../../../utils/logger";
 import SendEmailSendGrid from "../../../helpers/sendEmailSendgrid";
 import { toTitleCase } from "../../../helpers/convertToTitleCase";
@@ -25,6 +25,7 @@ interface EmailJob {
   template_vars: TemplateVars;
   post_office_center: string;
   attempts?: number;
+  channel?: string;
 }
 
 type ConsumeMessage = {
@@ -87,7 +88,6 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.channel?.close) await this.channel.close();
-    // await pool.end().catch(() => {});
     logger.info("🧹 Email worker stopped.");
   }
 
@@ -179,7 +179,6 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
 
       let attachments: any[] | undefined = undefined;
 
-      // ✅ Generate PDF receipt only when role="sender" & status="pending"
       const { role } = job.recipient;
       const status = job.template_vars.status?.toLowerCase();
 
@@ -210,7 +209,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
         subject,
         body: textBody,
         htmlBody,
-        attachments, // 👈 optional
+        attachments,
       });
 
       if (result?.success) {
@@ -239,7 +238,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
     if (nextAttempts > this.maxRetries) {
       await dbQuery(
         "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-        ["failed", nextAttempts, JSON.stringify(error), job.notif_id]
+        ["failed", nextAttempts, "Max retries reached", job.notif_id]
       );
       this.safeNack(msg, false, false);
       logger.error(
@@ -254,20 +253,11 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
       [nextAttempts, JSON.stringify(error), job.notif_id]
     );
 
-    const retrySchedule = [
-      30 * 60 * 1000, // 30 mins
-      2 * 60 * 60 * 1000, // 2 hrs
-      6 * 60 * 60 * 1000, // 6 hrs
-    ];
-    const retryDelayMs =
-      retrySchedule[Math.min(nextAttempts - 1, retrySchedule.length - 1)];
-
-    await publishDeliveryDelayed(job, retryDelayMs);
+    // ✅ Publish to RabbitMQ bucket instead of fixed delay
+    await publishDeliveryToBucket(job.channel || "email", job, nextAttempts);
     this.safeAck(msg);
     logger.warn(
-      `⚠️ Retry scheduled for ${job.notif_id} after ${
-        retryDelayMs / 60000
-      } minutes`
+      `⚠️ Retry scheduled for ${job.notif_id} via bucket system (attempt ${nextAttempts})`
     );
   }
 

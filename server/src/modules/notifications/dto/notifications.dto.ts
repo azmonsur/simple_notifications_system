@@ -19,6 +19,7 @@ export const PARCEL_STATUS = [
   "dispatched",
   "arrived",
   "received",
+  "returned",
 ] as const;
 
 // Recipient DTO

@@ -44,6 +44,6 @@ import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     // ✅ Apply API key middleware only for notifications routes
-    consumer.apply(ApiKeyMiddleware).forRoutes("api/v1/notification"); // <-- adjust path if different
+    consumer.apply(ApiKeyMiddleware).forRoutes("notification"); // <-- adjust path if different
   }
 }

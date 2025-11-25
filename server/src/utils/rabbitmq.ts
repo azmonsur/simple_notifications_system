@@ -15,61 +15,120 @@ interface RequeuePayload {
   channel: string;
 }
 
+type ChannelKey = keyof typeof CHANNEL_QUEUES;
+type DLRKey = keyof typeof DLR_QUEUES;
+
+//
 // MAIN queues
-const CHANNEL_QUEUES: Record<string, string> = {
+//
+const CHANNEL_QUEUES = {
   sms: "notifications.sms",
   whatsapp: "notifications.whatsapp",
   email: "notifications.email",
-};
+} as const;
 
+//
 // DLQs
+//
 const DLQ_QUEUES: Record<string, string> = {
   sms: "notifications.sms.dlq",
   whatsapp: "notifications.whatsapp.dlq",
   email: "notifications.email.dlq",
 };
 
-// delayed queues
-const DELAYED_QUEUES: Record<string, string> = {
-  sms: "notifications.sms.delayed",
-  whatsapp: "notifications.whatsapp.delayed",
-  email: "notifications.email.delayed",
-};
-
-// requeue queue
+//
+// REQUEUE (cleanup) queue
+//
 const REQUEUE_QUEUE = "notifications.requeue";
 
-/* =========================
-   DLR (provider-based) QUEUES
-   Termii, SendGrid, WhatsApp Meta are added
-   ========================= */
-
-// DLR queues (provider based)
-const DLR_QUEUES: Record<string, string> = {
+//
+// DLR (provider-based) QUEUES
+//
+const DLR_QUEUES = {
   termii: "dlr.termii",
   sendgrid: "dlr.sendgrid",
   whatsapp_meta: "dlr.whatsapp.meta",
-};
+} as const;
 
-// DLR delayed queues
-const DLR_DELAYED_QUEUES: Record<string, string> = {
-  termii: "dlr.termii.delayed",
-  sendgrid: "dlr.sendgrid.delayed",
-  whatsapp_meta: "dlr.whatsapp.meta.delayed",
-};
-
-// DLR DLQs
 const DLR_DLQ_QUEUES: Record<string, string> = {
   termii: "dlr.termii.dlq",
   sendgrid: "dlr.sendgrid.dlq",
   whatsapp_meta: "dlr.whatsapp.meta.dlq",
 };
 
+//
+// Bucket definitions (ordered arrays) - attempt indexes map to attempts (attempt 1 -> index 0)
+// NOTE: tune TTLs to your desired retry backoffs
+//
+export const SMS_DELAY_BUCKETS: Array<{ queue: string; ttl: number }> = [
+  { queue: "notifications.sms.delayed.30s", ttl: 30_000 },
+  { queue: "notifications.sms.delayed.2m", ttl: 120_000 },
+  { queue: "notifications.sms.delayed.5m", ttl: 300_000 },
+];
+
+export const WHATSAPP_DELAY_BUCKETS: Array<{ queue: string; ttl: number }> = [
+  { queue: "notifications.whatsapp.delayed.30s", ttl: 30_000 },
+  { queue: "notifications.whatsapp.delayed.2m", ttl: 120_000 },
+  { queue: "notifications.whatsapp.delayed.5m", ttl: 300_000 },
+];
+
+export const EMAIL_DELAY_BUCKETS: Array<{ queue: string; ttl: number }> = [
+  { queue: "notifications.email.delayed.1m", ttl: 60_000 },
+  { queue: "notifications.email.delayed.5m", ttl: 300_000 },
+  { queue: "notifications.email.delayed.10m", ttl: 600_000 },
+];
+
+export const DLR_TERMII_BUCKETS: Array<{ queue: string; ttl: number }> = [
+  { queue: "dlr.termii.delayed.10s", ttl: 10_000 },
+  { queue: "dlr.termii.delayed.30s", ttl: 30_000 },
+  { queue: "dlr.termii.delayed.2m", ttl: 120_000 },
+];
+
+export const DLR_SENDGRID_BUCKETS: Array<{ queue: string; ttl: number }> = [
+  { queue: "dlr.sendgrid.delayed.10s", ttl: 10_000 },
+  { queue: "dlr.sendgrid.delayed.30s", ttl: 30_000 },
+  { queue: "dlr.sendgrid.delayed.2m", ttl: 120_000 },
+];
+
+export const DLR_WHATSAPP_META_BUCKETS: Array<{ queue: string; ttl: number }> =
+  [
+    { queue: "dlr.whatsapp.meta.delayed.10s", ttl: 10_000 },
+    { queue: "dlr.whatsapp.meta.delayed.30s", ttl: 30_000 },
+    { queue: "dlr.whatsapp.meta.delayed.2m", ttl: 120_000 },
+  ];
+
+//
+// Map channel key -> buckets (for easy lookup in helpers)
+//
+const CHANNEL_DELAY_BUCKETS: Record<
+  ChannelKey,
+  Array<{ queue: string; ttl: number }>
+> = {
+  sms: SMS_DELAY_BUCKETS,
+  whatsapp: WHATSAPP_DELAY_BUCKETS,
+  email: EMAIL_DELAY_BUCKETS,
+};
+
+const DLR_DELAY_BUCKETS: Record<
+  DLRKey,
+  Array<{ queue: string; ttl: number }>
+> = {
+  termii: DLR_TERMII_BUCKETS,
+  sendgrid: DLR_SENDGRID_BUCKETS,
+  whatsapp_meta: DLR_WHATSAPP_META_BUCKETS,
+};
+
+//
+// RabbitMQ URL
+//
 const RABBITMQ_URL =
   process.env.NODE_ENV === "production"
     ? (process.env.RABBITMQ_URL_PROD as string)
     : (process.env.RABBITMQ_URL_DEV as string);
 
+//
+// Connect & assert queues (dynamic)
+//
 async function connect(): Promise<Channel> {
   if (channel) return channel;
 
@@ -111,42 +170,47 @@ async function connect(): Promise<Channel> {
       reconnect();
     });
 
-    // assert standard queues + DLQ + delayed
-    for (const [ch, queueName] of Object.entries(CHANNEL_QUEUES)) {
+    // Assert main channel queues, DLQs and bucket queues for each channel
+    for (const chKey of Object.keys(CHANNEL_QUEUES) as ChannelKey[]) {
+      const queueName = CHANNEL_QUEUES[chKey];
+      const dlqName = DLQ_QUEUES[chKey];
+
+      // main queue -> routes to DLQ on final failure if worker decides to send to DLQ programmatically
       await channel.assertQueue(queueName, {
         durable: true,
         arguments: {
           "x-dead-letter-exchange": "",
-          "x-dead-letter-routing-key": DLQ_QUEUES[ch],
+          "x-dead-letter-routing-key": dlqName,
         },
       });
 
-      await channel.assertQueue(DLQ_QUEUES[ch], { durable: true });
+      // DLQ
+      await channel.assertQueue(dlqName, { durable: true });
 
-      if (DELAYED_QUEUES[ch]) {
-        await channel.assertQueue(DELAYED_QUEUES[ch], {
-          durable: true,
-          arguments: {
-            "x-dead-letter-exchange": "",
-            "x-dead-letter-routing-key": CHANNEL_QUEUES[ch],
-          },
-        });
+      // assert bucket delayed queues (each bucket has TTL and dead-letters back to main queue)
+      const buckets = CHANNEL_DELAY_BUCKETS[chKey];
+      if (buckets && buckets.length > 0) {
+        for (const b of buckets) {
+          await channel.assertQueue(b.queue, {
+            durable: true,
+            arguments: {
+              "x-message-ttl": b.ttl,
+              "x-dead-letter-exchange": "",
+              "x-dead-letter-routing-key": queueName,
+            },
+          });
+        }
       }
     }
 
-    // ✅ assert the requeue cleanup queue
+    // assert requeue cleanup queue
     await channel.assertQueue(REQUEUE_QUEUE, { durable: true });
 
-    /* =========================
-       ASSERT DLR QUEUES (provider-based)
-       Termii, SendGrid, WhatsApp Meta
-       ========================= */
-    for (const provider of Object.keys(DLR_QUEUES)) {
+    // DLR queues + buckets + DLQs
+    for (const provider of Object.keys(DLR_QUEUES) as DLRKey[]) {
       const main = DLR_QUEUES[provider];
       const dlq = DLR_DLQ_QUEUES[provider];
-      const delayed = DLR_DELAYED_QUEUES[provider];
 
-      // main dlr queue -> routes to provider DLQ on failure
       await channel.assertQueue(main, {
         durable: true,
         arguments: {
@@ -155,17 +219,21 @@ async function connect(): Promise<Channel> {
         },
       });
 
-      // provider DLQ
       await channel.assertQueue(dlq, { durable: true });
 
-      // delayed queue for provider retries (messages there TTL -> bounce back to main queue)
-      await channel.assertQueue(delayed, {
-        durable: true,
-        arguments: {
-          "x-dead-letter-exchange": "",
-          "x-dead-letter-routing-key": main,
-        },
-      });
+      const buckets = DLR_DELAY_BUCKETS[provider];
+      if (buckets && buckets.length > 0) {
+        for (const b of buckets) {
+          await channel.assertQueue(b.queue, {
+            durable: true,
+            arguments: {
+              "x-message-ttl": b.ttl,
+              "x-dead-letter-exchange": "",
+              "x-dead-letter-routing-key": main,
+            },
+          });
+        }
+      }
     }
 
     logger.info("✅ RabbitMQ connected and all queues ready");
@@ -186,113 +254,176 @@ export async function getChannel(): Promise<Channel> {
   return connect();
 }
 
+//
+// Helper: get bucket by attempt (attempt is 1-based)
+// returns the bucket object or null (meaning no bucket => send to DLQ)
+//
+function getChannelBucket(channelKey: ChannelKey, attempt: number) {
+  const buckets = CHANNEL_DELAY_BUCKETS[channelKey] ?? [];
+  return buckets[attempt - 1] ?? null;
+}
+
+function getDLRBucket(provider: DLRKey, attempt: number) {
+  const buckets = DLR_DELAY_BUCKETS[provider] ?? [];
+  return buckets[attempt - 1] ?? null;
+}
+
+//
+// Generic helper: safe publish
+//
+async function safeSendToQueue(
+  ch: Channel,
+  queue: string,
+  payload: any,
+  headers?: Record<string, any>
+) {
+  const sent = ch.sendToQueue(queue, Buffer.from(JSON.stringify(payload)), {
+    persistent: true,
+    headers: headers ?? {},
+  });
+
+  if (sent) logger.info(`📨 Sent message to ${queue}`);
+  else logger.warn(`⚠️ Message not sent — queue may be full: ${queue}`);
+  return sent;
+}
+
+//
+// PUBLIC: publishDelivery (initial publish to main channel queues)
+//
 export async function publishDelivery(payload: any): Promise<void> {
   if (!payload.channel) throw new Error("Payload must include channel");
-  const queue = CHANNEL_QUEUES[payload.channel];
+  const channelKey = payload.channel as ChannelKey;
+  const queue = CHANNEL_QUEUES[channelKey];
   if (!queue) throw new Error(`Unknown channel: ${payload.channel}`);
 
   const ch = await getChannel();
-  const sent = ch.sendToQueue(queue, Buffer.from(JSON.stringify(payload)), {
-    persistent: true,
+  await safeSendToQueue(ch, queue, {
+    ...payload,
+    attempt: payload.attempt ?? 1,
   });
-
-  if (sent) logger.info(`📨 Message sent to ${queue}`);
-  else logger.warn(`⚠️ Message not sent — queue may be full`);
+  logger.info(`📨 Message sent to ${queue}`);
 }
 
-export async function publishDeliveryDelayed(payload: any, delayMs: number) {
-  if (!payload.channel) throw new Error("Payload must include channel");
-  const baseQueue = CHANNEL_QUEUES[payload.channel];
-  if (!baseQueue) throw new Error(`Unknown channel: ${payload.channel}`);
-
-  const delayedQueue = DELAYED_QUEUES[payload.channel];
-  if (!delayedQueue) throw new Error("Delayed queue not defined for channel");
-
+//
+// PUBLIC: publishDeliveryToBucket (used by workers to forward failed job to bucket)
+// - attempt param is the *current* attempt (1-based). Worker should pass current attempt
+// - the function will publish with attempt + 1 so the message moves through buckets
+//
+export async function publishDeliveryToBucket(
+  channelKeyStr: string,
+  payload: any,
+  attempt: number
+) {
+  const channelKey = channelKeyStr as ChannelKey;
   const ch = await getChannel();
-  const sent = ch.sendToQueue(
-    delayedQueue,
-    Buffer.from(JSON.stringify(payload)),
-    { persistent: true, expiration: delayMs }
-  );
 
-  if (sent) logger.info(`⏳ Delayed → ${delayedQueue} (${delayMs}ms)`);
-  else logger.warn(`⚠️ Delayed message NOT sent`);
-}
+  const buckets = CHANNEL_DELAY_BUCKETS[channelKey] ?? [];
+  const safeAttempt = Math.max(1, Math.min(attempt, buckets.length + 1));
 
-// ✅ NEW: publish into requeue queue
-// ✅ NEW: publish into requeue queue (safe, typed)
-
-export async function publishRequeue(payload: RequeuePayload): Promise<void> {
-  if (!payload.notif_id || !payload.channel) {
-    throw new Error("Requeue payload must include notif_id and channel");
+  const bucket = getChannelBucket(channelKey, safeAttempt);
+  if (bucket) {
+    const nextAttempt = safeAttempt + 1;
+    await safeSendToQueue(
+      ch,
+      bucket.queue,
+      { ...payload, attempt: nextAttempt },
+      { "x-attempt": nextAttempt }
+    );
+    logger.info(
+      `⏳ Delivery -> ${bucket.queue} (attempt=${nextAttempt}, ttl=${bucket.ttl}ms)`
+    );
+    return;
   }
 
-  const ch = await getChannel();
-  const sent = ch.sendToQueue(
-    REQUEUE_QUEUE,
-    Buffer.from(JSON.stringify(payload)),
-    {
-      persistent: true,
-    }
-  );
+  const dlq = DLQ_QUEUES[channelKey];
+  if (!dlq) throw new Error(`No DLQ defined for channel ${channelKey}`);
 
-  if (sent)
-    logger.info(
-      `♻️ Sent notif_id ${payload.notif_id} to requeue cleanup queue`
-    );
-  else
-    logger.warn(`⚠️ Requeue cleanup message for ${payload.notif_id} not sent`);
+  await safeSendToQueue(
+    ch,
+    dlq,
+    { ...payload, attempt: safeAttempt },
+    { "x-final": true }
+  );
+  logger.info(`🛑 Delivery moved to DLQ ${dlq} (attempt=${safeAttempt})`);
 }
 
-/* =========================
-   DLR PUBLISHER HELPERS
-   Use these from your webhook controllers:
-     publishDLR("termii", payload)
-     publishDLRDelayed("termii", payload, 15000) // 15s
-   ========================= */
-
+//
+// PUBLIC: publishDLR (initial publish to main DLR queue)
+//
 export async function publishDLR(
-  provider: keyof typeof DLR_QUEUES,
+  provider: DLRKey,
   payload: any
 ): Promise<void> {
   const queue = DLR_QUEUES[provider];
   if (!queue) throw new Error(`Unknown DLR provider: ${provider}`);
 
   const ch = await getChannel();
-  const sent = ch.sendToQueue(queue, Buffer.from(JSON.stringify(payload)), {
-    persistent: true,
+  await safeSendToQueue(ch, queue, {
+    ...payload,
+    attempt: payload.attempt ?? 1,
   });
-
-  if (sent) logger.info(`📨 DLR published to ${queue}`);
-  else logger.warn(`⚠️ DLR not published — queue may be full: ${queue}`);
+  logger.info(`📨 DLR published to ${queue}`);
 }
 
-export async function publishDLRDelayed(
-  provider: keyof typeof DLR_DELAYED_QUEUES,
+//
+// PUBLIC: publishDLRToBucket (used by DLR workers to forward failed job to bucket)
+//
+export async function publishDLRToBucket(
+  providerStr: string,
   payload: any,
-  delayMs: number,
-  attempt: number = 1 // default attempt = 1
-): Promise<void> {
-  const queue = DLR_DELAYED_QUEUES[provider];
-  if (!queue) throw new Error(`No delayed DLR queue for provider: ${provider}`);
+  attempt: number
+) {
+  const provider = providerStr as DLRKey;
+  const ch = await getChannel();
+
+  const buckets = DLR_DELAY_BUCKETS[provider] ?? [];
+  const safeAttempt = Math.max(1, Math.min(attempt, buckets.length + 1));
+
+  const bucket = getDLRBucket(provider, safeAttempt);
+  if (bucket) {
+    const nextAttempt = safeAttempt + 1;
+    await safeSendToQueue(
+      ch,
+      bucket.queue,
+      { ...payload, attempt: nextAttempt },
+      { "x-attempt": nextAttempt }
+    );
+    logger.info(
+      `⏳ DLR -> ${bucket.queue} (provider=${provider}, attempt=${nextAttempt}, ttl=${bucket.ttl}ms)`
+    );
+    return;
+  }
+
+  const dlq = DLR_DLQ_QUEUES[provider];
+  if (!dlq) throw new Error(`No DLR DLQ defined for provider ${provider}`);
+
+  await safeSendToQueue(
+    ch,
+    dlq,
+    { ...payload, attempt: safeAttempt },
+    { "x-final": true }
+  );
+  logger.info(
+    `🛑 DLR moved to DLQ ${dlq} (provider=${provider}, attempt=${safeAttempt})`
+  );
+}
+
+//
+// Requeue publisher (unchanged)
+//
+export async function publishRequeue(payload: RequeuePayload): Promise<void> {
+  if (!payload.notif_id || !payload.channel) {
+    throw new Error("Requeue payload must include notif_id and channel");
+  }
 
   const ch = await getChannel();
-  const sent = ch.sendToQueue(queue, Buffer.from(JSON.stringify(payload)), {
-    persistent: true,
-    expiration: delayMs,
-    headers: { "x-attempt": attempt }, // pass the current attempt
-  });
-
-  if (sent)
-    logger.info(`⏳ DLR Delayed → ${queue} (${delayMs}ms, attempt=${attempt})`);
-  else logger.warn(`⚠️ DLR delayed message NOT sent → ${queue}`);
+  await safeSendToQueue(ch, REQUEUE_QUEUE, payload);
+  logger.info(`♻️ Sent notif_id ${payload.notif_id} to requeue cleanup queue`);
 }
 
-/* Optionally you can directly route to provider DLQ programmatically:
-   export async function publishDLRToDLQ(provider: keyof typeof DLR_DLQ_QUEUES, payload: any) { ... }
-   but it's not implemented by default — your workers should decide when to ack -> dlq by rejecting/negative-acking.
-*/
-
+//
+// close/reconnect helpers (unchanged)
+//
 export async function closeConnection(): Promise<void> {
   try {
     if (channel) {

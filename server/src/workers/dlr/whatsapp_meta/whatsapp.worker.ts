@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDLRDelayed } from "../../../utils/rabbitmq";
+import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
 import { query } from "../../../utils/db";
 import { logger } from "../../../utils/logger";
 
@@ -77,14 +77,14 @@ export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {
       logger.warn(`❌ WhatsApp DLR attempt ${attempt} failed: ${err.message}`);
 
       if (attempt < this.MAX_RETRIES) {
-        const delay = this.BASE_DELAY * 2 ** (attempt - 1);
-
-        // Send to delayed queue with incremented attempt
-        await publishDLRDelayed("whatsapp_meta", payload, delay, attempt + 1);
+        // ✅ Use bucket-based retry instead of publishDLRDelayed
+        payload.attempts = attempt + 1;
+        payload.channel = "whatsapp"; // specify channel for bucket system
+        await publishDeliveryToBucket(payload.channel, payload, attempt + 1);
 
         this.safeAck(msg);
         logger.info(
-          `♻️ WhatsApp DLR scheduled retry #${attempt + 1} in ${delay}ms`
+          `♻️ WhatsApp DLR scheduled retry #${attempt + 1} via bucket system`
         );
       } else {
         this.safeNack(msg, false, false);

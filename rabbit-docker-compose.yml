@@ -1,0 +1,24 @@
+version: "4.2"
+
+services:
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3.12-management # Official RabbitMQ with management UI
+    hostname: rabbitmq
+    restart: unless-stopped
+
+    ports:
+      - "5672:5672" # AMQP port
+      - "15672:15672" # Management UI port
+
+    environment:
+      RABBITMQ_DEFAULT_USER: monsur
+      RABBITMQ_DEFAULT_PASS: rabbit_msq0308
+      RABBITMQ_DEFAULT_VHOST: "/" # optional default vhost
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq # Persistent data
+
+volumes:
+  rabbitmq_data:
+    driver: local

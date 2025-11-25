@@ -37,11 +37,11 @@ pool.on("error", (err) => {
 setInterval(async () => {
   try {
     await pool.query("SELECT 1");
-    logger.debug("Postgres keep-alive ping succeeded");
+    // logger.debug("Postgres keep-alive ping succeeded");
   } catch (err) {
     logger.warn("Postgres keep-alive ping failed", err);
   }
-}, 250000);
+}, 15000);
 
 export const query = async (sql: string, params?: any[]) => {
   const start = Date.now();

@@ -5,7 +5,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from "@nestjs/common";
-import { getChannel, publishDeliveryDelayed } from "../../../utils/rabbitmq";
+import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
 import { query as dbQuery } from "../../../utils/db";
 import SendSMSTermii from "../../../helpers/sendSMSTermii";
 import Bottleneck from "bottleneck";
@@ -29,6 +29,7 @@ interface SMSJob {
   recipient: Recipient;
   template_vars: TemplateVars;
   attempts?: number;
+  channel?: string;
 }
 
 type ConsumeMessage = {
@@ -127,7 +128,8 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
             delayMs / 3600000
           } hours`
         );
-        await publishDeliveryDelayed(job, delayMs);
+        job.attempts = (job.attempts ?? 0) + 1;
+        await publishDeliveryToBucket(job.channel || "sms", job, job.attempts);
         return this.safeAck(msg);
       }
 
@@ -210,7 +212,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // --- Retry logic ---
+  // --- Retry logic (bucket-based) ---
   private async handleRetry(
     job: SMSJob,
     msg: ConsumeMessage,
@@ -223,7 +225,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     if (nextAttempts > this.maxRetries) {
       await dbQuery(
         "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-        ["failed", nextAttempts, JSON.stringify(response), job.notif_id]
+        ["failed", nextAttempts, "Max retries reached", job.notif_id]
       );
       this.logger.error(
         `❌ notif ${job.notif_id} permanently failed → max retries reached`
@@ -237,19 +239,10 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
       [nextAttempts, JSON.stringify(response), job.notif_id]
     );
 
-    const retrySchedule = [
-      30 * 60 * 1000,
-      2 * 60 * 60 * 1000,
-      6 * 60 * 60 * 1000,
-    ];
-    const retryDelayMs =
-      retrySchedule[Math.min(nextAttempts - 1, retrySchedule.length - 1)];
+    await publishDeliveryToBucket(job.channel || "sms", job, nextAttempts);
 
-    await publishDeliveryDelayed(job, retryDelayMs);
     this.logger.warn(
-      `⚠️ notif ${job.notif_id} scheduled for retry in ${
-        retryDelayMs / 60000
-      } mins (attempt ${nextAttempts})`
+      `⚠️ notif ${job.notif_id} scheduled for retry via bucket system (attempt ${nextAttempts})`
     );
     this.safeAck(msg);
   }
