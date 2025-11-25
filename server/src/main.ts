@@ -14,7 +14,6 @@ import os from "os";
 import { AppModule } from "./app.module";
 import { logger } from "./utils/logger";
 import { MetricsMiddleware } from "./middleware/metrics.middleware";
-import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
 import { ConnectionLimiterMiddleware } from "./middleware/connection-limiter.middleware";
 
 import * as dotenv from "dotenv";
