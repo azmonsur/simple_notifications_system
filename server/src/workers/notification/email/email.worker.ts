@@ -214,8 +214,14 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
 
       if (result?.success) {
         await dbQuery(
-          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["sent", attempts + 1, null, job.notif_id]
+          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, provider_message_id=$4, updated_at=now() WHERE id=$5",
+          [
+            "sent",
+            attempts + 1,
+            null,
+            result.data.headers["x-message-id"],
+            job.notif_id,
+          ]
         );
         this.safeAck(msg);
         logger.info(`✅ Email sent: ${destination}`);

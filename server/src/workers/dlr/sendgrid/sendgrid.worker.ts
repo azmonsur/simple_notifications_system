@@ -58,7 +58,7 @@ export class SendGridDlrWorkerService implements OnModuleInit, OnModuleDestroy {
         [
           "sendgrid",
           "email",
-          payload.sg_message_id || payload.id,
+          payload.sg_message_id.split(".")[0] || payload.id,
           payload.sg_event_id || null,
           payload.email || payload.to,
           null,

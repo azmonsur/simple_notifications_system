@@ -197,9 +197,6 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
           ["sent", attempts, null, response.data.message_id, job.notif_id]
         );
         logger.info(`✅ SMS sent → notif ${job.notif_id}`);
-        logger.info(
-          `✅ PROVIDER RESPONSE ${JSON.stringify(response.data.message_id)}`
-        );
         return this.safeAck(msg);
       }
 

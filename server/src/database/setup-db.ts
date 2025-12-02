@@ -83,6 +83,6 @@ export const setup = async () => {
 };
 
 // Uncomment to run standalone
-// if (require.main === module) {
-//   setup();
-// }
+if (require.main === module) {
+  setup();
+}

@@ -9,7 +9,10 @@ import cookieParser from "cookie-parser";
 import csurf from "csurf";
 import { HttpsOptions } from "@nestjs/common/interfaces/external/https-options.interface";
 import { readFileSync, existsSync } from "fs";
+// import { setup } from "../src/database/setup-db";
 import os from "os";
+
+// setup();
 
 import { AppModule } from "./app.module";
 import { logger } from "./utils/logger";
