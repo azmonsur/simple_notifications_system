@@ -1,14 +1,10 @@
 // src/workers/sms/sms.worker.service.ts
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  OnModuleDestroy,
-} from "@nestjs/common";
+import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
 import { query as dbQuery } from "../../../utils/db";
 import SendSMSTermii from "../../../helpers/sendSMSTermii";
 import Bottleneck from "bottleneck";
+import { logger } from "../../../utils/logger";
 
 // --- Interfaces ---
 interface Recipient {
@@ -61,7 +57,6 @@ interface TermiiResponse {
 // --- SMS Worker Service ---
 @Injectable()
 export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger("SmsWorker");
   private readonly queueName = "notifications.sms";
   private readonly maxRetries = 3;
   private readonly maxConcurrentJobs = 5;
@@ -74,11 +69,11 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
   });
 
   async onModuleInit() {
-    this.logger.log("🚀 Starting SMS Worker...");
+    logger.info("🚀 Starting SMS Worker...");
     this.channel = (await getChannel()) as unknown as ConfirmChannel;
 
     if (!this.channel) {
-      this.logger.error("❌ Failed to get RabbitMQ channel.");
+      logger.error("❌ Failed to get RabbitMQ channel.");
       return;
     }
 
@@ -90,19 +85,19 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
         this.limiter
           .schedule(() => this.processMessage(msg))
           .catch((err) => {
-            this.logger.error("❌ Unhandled SMS job error:", err);
+            logger.error("❌ Unhandled SMS job error:", err);
             this.safeNack(msg);
           });
       },
       { noAck: false }
     );
 
-    this.logger.log(`✅ SMS worker consuming queue: ${this.queueName}`);
+    logger.info(`✅ SMS worker consuming queue: ${this.queueName}`);
   }
 
   async onModuleDestroy() {
     if (this.channel?.close) await this.channel.close();
-    this.logger.log("🧹 RabbitMQ channel closed gracefully.");
+    logger.info("🧹 RabbitMQ channel closed gracefully.");
   }
 
   // --- Core message processor ---
@@ -113,7 +108,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     try {
       job = JSON.parse(msg.content.toString());
     } catch (err) {
-      this.logger.error("❌ Invalid JSON message:", err);
+      logger.error("❌ Invalid JSON message:", err);
       return this.safeAck(msg);
     }
 
@@ -123,7 +118,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
       // Time-based restriction
       if (!this.isWithinSendWindow()) {
         const delayMs = this.getNextSendWindowDelay();
-        this.logger.warn(
+        logger.warn(
           `⏰ Job ${job.notif_id} outside send window, delaying for ${
             delayMs / 3600000
           } hours`
@@ -136,7 +131,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
       const smsBody = this.formatMessage(job);
       await this.sendSMS(job, smsBody, msg);
     } catch (err: any) {
-      this.logger.error(
+      logger.error(
         `❌ SMS failed (notif ${job?.notif_id || "unknown"}): ${err.message}`
       );
       await this.handleRetry(job, msg);
@@ -198,16 +193,19 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
 
       if (response?.success) {
         await dbQuery(
-          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["sent", attempts, null, job.notif_id]
+          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, provider_message_id=$4, updated_at=now() WHERE id=$5",
+          ["sent", attempts, null, response.data.message_id, job.notif_id]
         );
-        this.logger.log(`✅ SMS sent → notif ${job.notif_id}`);
+        logger.info(`✅ SMS sent → notif ${job.notif_id}`);
+        logger.info(
+          `✅ PROVIDER RESPONSE ${JSON.stringify(response.data.message_id)}`
+        );
         return this.safeAck(msg);
       }
 
       await this.handleRetry(job, msg, response, attempts);
     } catch (err) {
-      this.logger.error(`❌ SMS send error for ${job.notif_id}:`, err);
+      logger.error(`❌ SMS send error for ${job.notif_id}:`, err);
       await this.handleRetry(job, msg, null, attempts);
     }
   }
@@ -227,7 +225,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
         "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
         ["failed", nextAttempts, "Max retries reached", job.notif_id]
       );
-      this.logger.error(
+      logger.error(
         `❌ notif ${job.notif_id} permanently failed → max retries reached`
       );
       return this.safeNack(msg, false, false);
@@ -241,7 +239,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
 
     await publishDeliveryToBucket(job.channel || "sms", job, nextAttempts);
 
-    this.logger.warn(
+    logger.warn(
       `⚠️ notif ${job.notif_id} scheduled for retry via bucket system (attempt ${nextAttempts})`
     );
     this.safeAck(msg);
@@ -252,7 +250,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     try {
       this.channel?.ack(msg);
     } catch (err) {
-      this.logger.error("Ack failed:", err);
+      logger.error("Ack failed:", err);
     }
   }
 
@@ -264,7 +262,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
     try {
       this.channel?.nack(msg, allUpTo, requeue);
     } catch (err) {
-      this.logger.error("Nack failed:", err);
+      logger.error("Nack failed:", err);
     }
   }
 

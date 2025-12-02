@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS parcels (
 );
 
 -- Indexes for parcels
-CREATE INDEX IF NOT EXISTS idx_parcels_tracking_number ON parcels (tracking_number);
 CREATE INDEX IF NOT EXISTS idx_parcels_status ON parcels (current_status);
 CREATE INDEX IF NOT EXISTS idx_parcels_updated_at ON parcels (updated_at);
 
@@ -40,6 +39,7 @@ CREATE TABLE IF NOT EXISTS parcel_history (
 
 -- Indexes for parcel_history
 CREATE INDEX IF NOT EXISTS idx_parcel_history_parcel_id ON parcel_history (parcel_id);
+CREATE INDEX IF NOT EXISTS idxparcel_history_lookup ON parcel_history (parcel_id, changed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_parcel_history_changed_at ON parcel_history (changed_at);
 CREATE INDEX IF NOT EXISTS idx_parcel_history_new_status ON parcel_history (new_status);
 
@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 
 -- Indexes for notifications
+CREATE INDEX IF NOT EXISTS idx_notifications_id_status ON notifications (id, status);
 CREATE INDEX IF NOT EXISTS idx_notifications_parcel_id ON notifications (parcel_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications (status);
 CREATE INDEX IF NOT EXISTS idx_notifications_channel ON notifications (channel);
@@ -73,6 +74,23 @@ CREATE INDEX IF NOT EXISTS idx_notifications_recipient_role ON notifications (re
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at);
 CREATE INDEX IF NOT EXISTS idx_notifications_updated_at ON notifications (updated_at);
 
+
+----------------------------------------------------
+-- TABLE: outbox
+----------------------------------------------------
+CREATE TABLE outbox (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    notif_id uuid NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+    payload JSONB NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',   -- pending, published, failed
+    attempts INT NOT NULL DEFAULT 0,
+    error TEXT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_outbox_status_created
+ON outbox(status, created_at);
 
 ----------------------------------------------------
 -- TABLE: webhook_logs

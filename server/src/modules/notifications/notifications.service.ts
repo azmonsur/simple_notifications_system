@@ -10,11 +10,7 @@ import {
 
 import { QueryResult, PoolClient } from "pg";
 import { encryptDestination, decryptDestination } from "./utils/crypto";
-import {
-  publishDelivery,
-  getChannel,
-  publishRequeue,
-} from "../../utils/rabbitmq";
+import { publishDelivery, publishRequeue } from "../../utils/rabbitmq";
 import { CreateNotificationDto } from "./dto/notifications.dto";
 import { query as dbQuery, pool } from "../../utils/db";
 import { logger } from "../../utils/logger";
@@ -47,11 +43,9 @@ export class NotificationsService {
   /**
    * Create or update parcels and generate notifications
    */
-  async createFromEvent(
-    event: CreateNotificationDto,
+  // src/notifications/notifications.service.ts
 
-    ip: string
-  ) {
+  async createFromEvent(event: CreateNotificationDto, ip: string) {
     if (!event?.payload) {
       logger.error("❌ Invalid event: missing payload");
       throw new InternalServerErrorException("Missing event payload");
@@ -131,7 +125,6 @@ export class NotificationsService {
           console.log(
             `ℹ️ Status "${parcel_status}" already exists for parcel ${tracking_number}. Skipping history & notifications.`
           );
-
           throw new ConflictException({
             message: `Parcel already has status '${parcel_status}'`,
           });
@@ -146,7 +139,7 @@ export class NotificationsService {
           [parcelId, last_status, parcel_status, "system"]
         );
 
-        // --- Generate notifications
+        // --- Generate notifications and insert into outbox
         const recipients = [
           { role: "sender", ...sender },
           { role: "receiver", ...receiver },
@@ -187,6 +180,7 @@ export class NotificationsService {
               ];
             }
 
+            // --- Insert notification
             const notifRes: QueryResult<{ id: string }> = await client.query(
               `INSERT INTO notifications (
                 parcel_id, channel, recipient_role, recipient_name, recipient_destination,
@@ -214,26 +208,39 @@ export class NotificationsService {
 
             const notif = notifRes.rows[0];
 
-            await publishDelivery({
-              notif_id: notif.id,
-              parcel_id: parcelId,
-              channel: ch,
-              post_office_center: postOfficeCenter,
-              recipient: {
-                name: r.name,
-                role: r.role,
-                destination,
-              },
-              template_vars: {
-                tracking_number,
-                status: parcel_status,
-                amount: amount ?? null,
-              },
-              attachments,
-              created_at: new Date().toISOString(),
-            });
+            // --- Insert into outbox table
+            await client.query(
+              `INSERT INTO outbox (
+                notif_id, payload, status, attempts, created_at, updated_at
+              ) VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+              [
+                notif.id,
+                JSON.stringify({
+                  notif_id: notif.id,
+                  parcel_id: parcelId,
+                  channel: ch,
+                  post_office_center: postOfficeCenter,
+                  recipient: {
+                    name: r.name,
+                    role: r.role,
+                    destination,
+                  },
+                  template_vars: {
+                    tracking_number,
+                    status: parcel_status,
+                    amount: amount ?? null,
+                  },
+                  attachments,
+                  created_at: new Date().toISOString(),
+                }),
+                "pending",
+                0,
+              ]
+            );
 
-            logger.info(`✅ Notification created & published: ${notif.id}`);
+            logger.info(
+              `✅ Notification created & inserted into outbox: ${notif.id}`
+            );
           }
         }
       });
@@ -241,12 +248,13 @@ export class NotificationsService {
       if (err instanceof HttpException) {
         throw err;
       }
-
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error(`❌ createFromEvent failed: ${errMsg}`);
       throw new InternalServerErrorException("Event processing failed");
     }
   }
+
+  // --- listFailed, markQueued, markResolved remain intact
 
   // --- List failed notifications
   async listFailed(limit = 100) {

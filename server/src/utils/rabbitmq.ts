@@ -10,6 +10,10 @@ let conn: Connection | null = null;
 let channel: Channel | null = null;
 let connecting = false;
 
+type ConfirmChannel = Channel & {
+  waitForConfirms(): Promise<void>;
+};
+
 interface RequeuePayload {
   notif_id: string;
   channel: string;
@@ -21,7 +25,7 @@ type DLRKey = keyof typeof DLR_QUEUES;
 //
 // MAIN queues
 //
-const CHANNEL_QUEUES = {
+export const CHANNEL_QUEUES = {
   sms: "notifications.sms",
   whatsapp: "notifications.whatsapp",
   email: "notifications.email",
@@ -302,6 +306,43 @@ export async function publishDelivery(payload: any): Promise<void> {
     attempt: payload.attempt ?? 1,
   });
   logger.info(`📨 Message sent to ${queue}`);
+}
+
+// --- Batch send to arbitrary queue
+export async function publishBatchToQueue(
+  queue: string,
+  payloads: any[],
+  headers?: Record<string, any>
+) {
+  if (!payloads.length) return;
+  const ch = await getChannel();
+
+  for (const payload of payloads) {
+    await safeSendToQueue(ch, queue, payload, headers);
+  }
+
+  logger.info(`📨 Batch published to ${queue} (${payloads.length} messages)`);
+}
+
+export async function publishDeliveryBatch(payloads: any[]) {
+  if (!payloads.length) return;
+
+  const ch = await getChannel();
+  const grouped: Record<string, any[]> = {};
+
+  // Group payloads by channel
+  for (const payload of payloads) {
+    if (!payload.channel) continue;
+    grouped[payload.channel] = grouped[payload.channel] ?? [];
+    grouped[payload.channel].push(payload);
+  }
+
+  // Send each channel's batch
+  for (const [channelKey, batch] of Object.entries(grouped)) {
+    const queue = CHANNEL_QUEUES[channelKey as ChannelKey];
+    if (!queue) continue;
+    await publishBatchToQueue(queue, batch);
+  }
 }
 
 //

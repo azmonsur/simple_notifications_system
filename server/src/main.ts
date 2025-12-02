@@ -245,6 +245,9 @@ async function bootstrap() {
       logger.warn("CORS is disabled - no ALLOWED_ORIGINS configured");
     }
 
+    // Metrics middleware
+    app.use(new MetricsMiddleware().use);
+
     // ✅ MOVED: Apply connection limiter early in the middleware chain
     const connectionLimiter = new ConnectionLimiterMiddleware({
       maxConnectionsPerIp: parseInt(
@@ -339,9 +342,9 @@ async function bootstrap() {
           }
           return compression.filter(req, res);
         },
-        level: getCompressionLevel(),
+        level: 3, //getCompressionLevel(),
         // Memory level (1-9, higher = more memory but better compression)
-        memLevel: getDynamicMemLevel(),
+        memLevel: 5, //getDynamicMemLevel(),
       })
     );
 
@@ -370,8 +373,6 @@ async function bootstrap() {
     // Setup error handlers first
     setupErrorHandlers(app);
 
-    // Metrics middleware
-    app.use(new MetricsMiddleware().use);
     // app.use(new ApiKeyMiddleware().use);
 
     // Cookie parser (required for CSRF)
@@ -425,14 +426,14 @@ async function bootstrap() {
     const server = app.getHttpServer();
 
     // Set timeouts for idle connections
-    server.keepAliveTimeout = 61000; // 61 seconds (must be > load balancer timeout)
-    server.headersTimeout = 65000; // 65 seconds (must be > keepAliveTimeout)
+    server.keepAliveTimeout = 30000; // 61 seconds (must be > load balancer timeout)
+    server.headersTimeout = 35000; // 65 seconds (must be > keepAliveTimeout)
 
     // Close idle connections after 30 seconds
-    server.timeout = 30000;
+    server.timeout = 60000;
 
     // Limit connections per IP
-    server.maxConnections = 100; // Max concurrent connections total
+    server.maxConnections = 500; // Max concurrent connections total
 
     const protocol = false ? "https" : "http"; // httpsOptions ? "https" : "http";
     logger.info(

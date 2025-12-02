@@ -2,6 +2,22 @@
   "gen-cookie-secret": `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
   }
 
+
+  GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE outbox TO notif
+GRANT USAGE, SELECT, UPDATE ON INDEX idx_outbox_status_created TO notif;
+
+
+import cron from 'node-cron';
+import { pool } from './utils/db';
+
+cron.schedule('0 2 * * *', async () => {
+  console.log('Running outbox cleanup...');
+  await pool.query('CALL archive_and_cleanup_outbox_batch();');
+});
+
+
+
+
 {
   "type": "outbound", 
   "receiver":"2348132329187",
