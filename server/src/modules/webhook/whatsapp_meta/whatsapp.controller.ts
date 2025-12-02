@@ -20,7 +20,7 @@ export class WhatsAppWebhookController {
     logger.info(`📩 WhatsApp Status Event: ${JSON.stringify(data)}`);
 
     await publishDLR("whatsapp_meta", data);
-    console.log(data);
+    console.log(JSON.stringify(data));
     return { success: true };
   }
 
