@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
     sender VARCHAR(50),                     -- sender info (optional)
     status VARCHAR(50) NOT NULL,           -- delivered, failed, read, bounced, etc.
     cost NUMERIC(10,4),                    -- optional: message cost (Termii SMS only)
+    remark TEXT,                           -- optional: error info or additional remarks
     raw_payload JSONB NOT NULL,            -- full webhook payload for reference
     sent_at TIMESTAMP WITH TIME ZONE,      -- optional: when message was sent
     delivered_at TIMESTAMP WITH TIME ZONE, -- optional: when message was delivered

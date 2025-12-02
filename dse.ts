@@ -47,3 +47,5 @@ const recipient_id = wa_dlr.entry[0].changes[0].value.statuses[0].recipient_id;
 const error_info =
   wa_dlr.entry[0].changes[0].value.statuses[0].errors[0].error_data.details;
 const external_id = wa_dlr.entry[0].id;
+const message_from =
+  wa_dlr.entry[0].changes[0].value.metadata.display_phone_number;

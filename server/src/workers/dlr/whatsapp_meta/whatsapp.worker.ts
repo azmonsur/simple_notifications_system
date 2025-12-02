@@ -42,12 +42,25 @@ export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {
       return this.safeNack(msg, false, false);
     }
 
+    const message_id =
+      payload.entry[0].changes[0].value.statuses[0].id.split(".")[1];
+    const message_status = payload.entry[0].changes[0].value.statuses[0].status;
+    const timestamp = payload.entry[0].changes[0].value.statuses[0].timestamp;
+    const recipient_id =
+      payload.entry[0].changes[0].value.statuses[0].recipient_id;
+    const message_from =
+      payload.entry[0].changes[0].value.metadata.display_phone_number;
+    const error_info =
+      payload.entry[0].changes[0].value.statuses[0].errors[0].error_data
+        .details;
+    const external_id = payload.entry[0].id;
+
     try {
       await query(
         `
         INSERT INTO webhook_logs
-          (provider, channel, message_id, external_id, recipient, sender, status, cost, raw_payload, sent_at, delivered_at, retries)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12)
+          (provider, channel, message_id, external_id, recipient, sender, status, cost, raw_payload, sent_at, delivered_at, retries, remark)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13)
         ON CONFLICT (provider, message_id) DO UPDATE
         SET status = EXCLUDED.status,
             delivered_at = COALESCE(EXCLUDED.delivered_at, webhook_logs.delivered_at),
@@ -57,18 +70,17 @@ export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {
         [
           "whatsapp_meta",
           "whatsapp",
-          payload.message_id || payload.id,
-          payload.id || null,
-          payload.to || null,
-          payload.from || null,
-          payload.status.toLowerCase() || "unknown",
+          message_id,
+          external_id || null,
+          recipient_id || null,
+          message_from || null,
+          message_status.toLowerCase() || "unknown",
           null,
           payload,
-          payload.sent_at ? new Date(payload.sent_at).toISOString() : null,
-          payload.delivered_at
-            ? new Date(payload.delivered_at).toISOString()
-            : null,
+          timestamp ? new Date(timestamp).toISOString() : null,
+          timestamp ? new Date(timestamp).toISOString() : null,
           attempt,
+          error_info || null,
         ]
       );
 
