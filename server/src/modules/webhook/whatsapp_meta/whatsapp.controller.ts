@@ -11,16 +11,17 @@ import {
 // import { WhatsAppDLRDto } from "./whatsapp.dto";
 import { publishDLR } from "../../../utils/rabbitmq";
 import { logger } from "../../../utils/logger";
+import { WhatsAppWebhookDto } from "./whatsapp.dto";
 
 @Controller("webhook/whatsapp")
 export class WhatsAppWebhookController {
   @Post("status")
   @HttpCode(200)
-  async receiveStatus(@Body() data: any) {
+  async receiveStatus(@Body() data: WhatsAppWebhookDto) {
     logger.info(`📩 WhatsApp Status Event: ${JSON.stringify(data)}`);
 
     await publishDLR("whatsapp_meta", data);
-    console.log(JSON.stringify(data));
+
     return { success: true };
   }
 
