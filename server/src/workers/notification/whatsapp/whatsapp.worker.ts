@@ -144,8 +144,14 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
 
       if (response?.success) {
         await dbQuery(
-          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, updated_at=now() WHERE id=$4",
-          ["sent", nextAttempts, null, job.notif_id]
+          "UPDATE notifications SET status=$1, attempts=$2, last_error=$3, provider_message_id=$4, updated_at=now() WHERE id=$5",
+          [
+            "sent",
+            nextAttempts,
+            null,
+            response.data.messages[0].id.split(".")[1],
+            job.notif_id,
+          ]
         );
         logger.info(
           JSON.stringify({ notif_id: job.notif_id, to: phone, status: "sent" })
