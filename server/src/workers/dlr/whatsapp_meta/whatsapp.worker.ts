@@ -44,8 +44,6 @@ export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {
 
     const message_id =
       payload.entry[0].changes[0].value.statuses[0].id.split(".")[1];
-    const message_status = payload.entry[0].changes[0].value.statuses[0].status;
-    const timestamp = payload.entry[0].changes[0].value.statuses[0].timestamp;
     const recipient_id =
       payload.entry[0].changes[0].value.statuses[0].recipient_id;
     const message_from =
@@ -53,7 +51,14 @@ export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {
     const error_info =
       payload.entry[0].changes[0].value.statuses[0].errors[0].error_data
         .details;
+
+    const message_status = payload.entry[0].changes[0].value.statuses[0].status;
+    const timestamp = payload.entry[0].changes[0].value.statuses[0].timestamp;
     const external_id = payload.entry[0].id;
+
+    logger.error(
+      `DATAAAAAAAAAAA ${message_id} ${recipient_id} ${message_from} ${error_info} ${message_status} ${timestamp} ${external_id}`
+    );
 
     try {
       await query(
@@ -77,8 +82,8 @@ export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {
           message_status.toLowerCase() || "unknown",
           null,
           payload,
-          timestamp ? new Date(timestamp).toISOString() : null,
-          timestamp ? new Date(timestamp).toISOString() : null,
+          timestamp ? new Date(timestamp * 1000).toISOString() : null,
+          timestamp ? new Date(timestamp * 1000).toISOString() : null,
           attempt,
           error_info || null,
         ]

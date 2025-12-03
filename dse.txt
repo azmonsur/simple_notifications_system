@@ -17,48 +17,7 @@ cron.schedule('0 2 * * *', async () => {
 
 
 
-
-{
-  "type": "outbound", 
-  "receiver":"2348132329187",
-  "sender":"CyberBridge",
-  "message":"Hi Biola Abodunrin, Thank you for your shipment. Order (NIP098UNH) estimated charges: N1,000.00.",
-  "cost":"10.0000",
-  "pages":2,
-  "command":"deliver",
-  "status":"DELIVERED | Message delivered to handset",
-  "channel":"generic",
-  "message_id":"3017636638097397161867125",
-  "message_id_str":"3017636638097397161867125",
-  "sent_at":"2025-11-20T19:36:49.777211Z",
-  "delivered_at":"2025-11-20T19:36:51.332056Z",
-  "msgtype":5,
-  "origid":"3017636638097397161867125",
-  "messagestate":"Delivered",
-  "notify_id":"3017636638097397161867125"
-}
-
-
-{
-  "email": "admin@example.com",
-  "password": "admin"
-}
-
- [
-  {
-    "email":"donkenny03@gmail.com",
-    "event":"delivered",
-    "ip":"149.72.154.232",
-    "response":"250 2.0.0 OK  1763663812 d75a77b69052e-4ee48eaeea9si10574311cf.1007 - gsmtp","sg_event_id":"ZGVsaXZlcmVkLTAtNTcxNTg5MDQteWJQOU1vRklUVDZRUFpBOC1XZ1VEdy0w",
-    "sg_message_id":"ybP9MoFITT6QPZA8-WgUDw.recvd-769f975875-9cdbw-1-691F5FC2-10.0",
-    "smtp-id":"<ybP9MoFITT6QPZA8-WgUDw@geopod-ismtpd-15>",
-    "timestamp":1763663812,
-    "tls":1
-  }
-]
-
-
-
+_______________SNS PAYLOAD_________________
 {
   "payload": {
     "tracking_number": "NIP987GF",
@@ -84,4 +43,97 @@ cron.schedule('0 2 * * *', async () => {
     }
   }
 }
+
+
+
+_______________LOGIN DS_________________
+{
+  "email": "admin@example.com",
+  "password": "admin"
+}
+
+
+
+_______________SMS_________________
+{
+  "type": "outbound", 
+  "receiver":"2348132329187",
+  "sender":"CyberBridge",
+  "message":"Hi Biola Abodunrin, Thank you for your shipment. Order (NIP098UNH) estimated charges: N1,000.00.",
+  "cost":"10.0000",
+  "pages":2,
+  "command":"deliver",
+  "status":"DELIVERED | Message delivered to handset",
+  "channel":"generic",
+  "message_id":"3017636638097397161867125",
+  "message_id_str":"3017636638097397161867125",
+  "sent_at":"2025-11-20T19:36:49.777211Z",
+  "delivered_at":"2025-11-20T19:36:51.332056Z",
+  "msgtype":5,
+  "origid":"3017636638097397161867125",
+  "messagestate":"Delivered",
+  "notify_id":"3017636638097397161867125"
+}
+
+
+
+_______________EMAIL_________________
+ [
+  {
+    "email":"donkenny03@gmail.com",
+    "event":"delivered",
+    "ip":"149.72.154.232",
+    "response":"250 2.0.0 OK  1763663812 d75a77b69052e-4ee48eaeea9si10574311cf.1007 - gsmtp",
+    "sg_event_id":"ZGVsaXZlcmVkLTAtNTcxNTg5MDQteWJQOU1vRklUVDZRUFpBOC1XZ1VEdy0w",
+    "sg_message_id":"ybP9MoFITT6QPZA8-WgUDw.recvd-769f975875-9cdbw-1-691F5FC2-10.0",
+    "smtp-id":"<ybP9MoFITT6QPZA8-WgUDw@geopod-ismtpd-15>",
+    "timestamp":1763 6638 12, 1764 6932 61
+    "tls":1
+  }
+]
+
+
+
+_______________WHATSAPP_________________
+{
+  object: "whatsapp_business_account",
+  entry: [
+    {
+      id: "4304270773175861",
+      changes: [
+        {
+          value: {
+            messaging_product: "whatsapp",
+            metadata: {
+              display_phone_number: "2348107963504",
+              phone_number_id: "826781770524694",
+            },
+            statuses: [
+              {
+                id: "wamid.HBgNMjM0ODEzMjMyOTE4NxUCABEYEjY0NzZBNEM4NjgxNDg3MzM1MgA=",
+                status: "failed",
+                timestamp: "1764693261",
+                recipient_id: "2348132329187",
+                errors: [
+                  {
+                    code: 131047,
+                    title: "Re-engagement message",
+                    message: "Re-engagement message",
+                    error_data: {
+                      details:
+                        "Message failed to send because more than 24 hours have passed since the customer last replied to this number.",
+                    },
+                    href: "https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes/",
+                  },
+                ],
+              },
+            ],
+          },
+          field: "messages",
+        },
+      ],
+    },
+  ],
+};
+
 

@@ -18,7 +18,7 @@ export class WhatsAppWebhookController {
   @Post("status")
   @HttpCode(200)
   async receiveStatus(@Body() data: WhatsAppWebhookDto) {
-    logger.info(`📩 WhatsApp Status Event: ${JSON.stringify(data)}`);
+    // logger.info(`📩 WhatsApp Status Event: ${JSON.stringify(data)}`);
 
     await publishDLR("whatsapp_meta", data);
 

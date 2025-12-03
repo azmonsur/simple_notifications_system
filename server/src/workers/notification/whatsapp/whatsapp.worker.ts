@@ -96,11 +96,15 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private getTemplateParams(job: WhatsAppJob) {
     const { recipient, template_vars } = job;
+    const formattedAmount = new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+    }).format(template_vars.amount as number);
     return {
-      customer_name: recipient.name || "Customer",
-      tracking_number: template_vars.tracking_number || "N/A",
+      customerName: recipient.name || "Customer",
+      trackingNumber: template_vars.tracking_number || "N/A",
       status: template_vars.status || "N/A",
-      amount: (template_vars.amount ?? 0).toString(),
+      formattedAmount: (formattedAmount ?? 0).toString(),
     };
   }
 
