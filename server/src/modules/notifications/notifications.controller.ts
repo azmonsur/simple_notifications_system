@@ -7,6 +7,7 @@ import {
   Req,
   Param,
   UseGuards,
+  HttpCode,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { NotificationsService } from "./notifications.service";
@@ -20,8 +21,13 @@ export class NotificationsController {
   constructor(private svc: NotificationsService) {}
 
   // @Throttle({ default: { limit: 300, ttl: 60 } }) // max 50 requests per IP per 60 seconds
+
   @Post("notification")
-  async webhook(@Body() event: CreateNotificationDto, @Req() req: Request) {
+  @HttpCode(202)
+  async notification(
+    @Body() event: CreateNotificationDto,
+    @Req() req: Request
+  ) {
     const ip = req.ip;
     await this.svc.createFromEvent(event, ip as unknown as string);
 
