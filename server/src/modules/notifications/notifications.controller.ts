@@ -26,7 +26,7 @@ export class NotificationsController {
     await this.svc.createFromEvent(event, ip as unknown as string);
 
     return {
-      statusCode: 201,
+      statusCode: 202,
       message: "Notification accepted for processing",
     };
   }
