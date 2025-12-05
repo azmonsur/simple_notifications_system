@@ -45,6 +45,8 @@ export class NotificationsService {
    */
   // src/notifications/notifications.service.ts
 
+  // src/notifications/notifications.service.ts
+
   async createFromEvent(event: CreateNotificationDto, ip: string) {
     if (!event?.payload) {
       logger.error("❌ Invalid event: missing payload");
@@ -59,6 +61,7 @@ export class NotificationsService {
       destination_center,
       sender,
       receiver,
+      recall,
     } = event.payload;
 
     if (
@@ -72,27 +75,77 @@ export class NotificationsService {
 
     try {
       await this.withTransaction(async (client) => {
+        const statusNormalized = parcel_status.toLowerCase();
+
+        // 1. GET HISTORY FIRST (Read-Only Check for State Machine Rules)
+        const historyRes = await client.query(
+          `SELECT p.id as parcel_id, ph.new_status 
+         FROM parcels p 
+         LEFT JOIN parcel_history ph ON p.id = ph.parcel_id 
+         WHERE p.tracking_number = $1 
+         ORDER BY ph.changed_at DESC`,
+          [tracking_number]
+        );
+
+        const parcelExists =
+          historyRes.rows.length > 0 && historyRes.rows[0].parcel_id !== null;
+        let parcelId: string | undefined;
+        let previousStatus: string | null = null;
+
+        if (parcelExists) {
+          parcelId = historyRes.rows[0].parcel_id;
+
+          const history = historyRes.rows
+            .map((r) => r.new_status?.toLowerCase())
+            .filter(Boolean);
+
+          previousStatus = historyRes.rows[0].new_status ?? null;
+          const lastStatusNormalized = history[0];
+
+          // --- RULE 1: NO CONSECUTIVE DUPLICATES (Must throw ConflictException) ---
+          if (lastStatusNormalized === statusNormalized) {
+            logger.info(
+              `ℹ️ Status '${parcel_status}' is a consecutive duplicate for ${tracking_number}. Ignoring.`
+            );
+            throw new ConflictException({
+              message: `Status '${parcel_status}' is a consecutive duplicate for ${tracking_number}.`,
+            });
+          }
+
+          // --- RULE 2: RECALL CHECK (Historical Duplicates - Must throw ConflictException if !recall) ---
+          const existsInHistory = history.includes(statusNormalized);
+
+          if (existsInHistory && !recall) {
+            logger.warn(
+              `⚠️ Status '${parcel_status}' occurred previously for ${tracking_number} and recall is FALSE. Ignoring.`
+            );
+            throw new ConflictException({
+              message: `Parcel already has status '${parcel_status}'`,
+            });
+          }
+        }
+
         // --- Upsert parcel
         const parcelRes: QueryResult<{ id: string }> = await client.query(
           `INSERT INTO parcels (
-            tracking_number, sender_name, sender_phone, sender_email,
-            receiver_name, receiver_phone, receiver_email, amount, current_status,
-            origin_center, destination_center
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-          ON CONFLICT (tracking_number) 
-          DO UPDATE SET
-            sender_name = EXCLUDED.sender_name,
-            sender_phone = EXCLUDED.sender_phone,
-            sender_email = EXCLUDED.sender_email,
-            receiver_name = EXCLUDED.receiver_name,
-            receiver_phone = EXCLUDED.receiver_phone,
-            receiver_email = EXCLUDED.receiver_email,
-            amount = EXCLUDED.amount,
-            current_status = EXCLUDED.current_status,
-            origin_center = EXCLUDED.origin_center,
-            destination_center = EXCLUDED.destination_center,
-            updated_at = now()
-          RETURNING id`,
+          tracking_number, sender_name, sender_phone, sender_email,
+          receiver_name, receiver_phone, receiver_email, amount, current_status,
+          origin_center, destination_center
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        ON CONFLICT (tracking_number) 
+        DO UPDATE SET
+          sender_name = EXCLUDED.sender_name,
+          sender_phone = EXCLUDED.sender_phone,
+          sender_email = EXCLUDED.sender_email,
+          receiver_name = EXCLUDED.receiver_name,
+          receiver_phone = EXCLUDED.receiver_phone,
+          receiver_email = EXCLUDED.receiver_email,
+          amount = EXCLUDED.amount,
+          current_status = EXCLUDED.current_status,
+          origin_center = EXCLUDED.origin_center,
+          destination_center = EXCLUDED.destination_center,
+          updated_at = now()
+        RETURNING id`,
           [
             tracking_number,
             sender.name,
@@ -108,38 +161,19 @@ export class NotificationsService {
           ]
         );
 
-        const parcelId = parcelRes.rows[0].id;
-
-        // --- Check history
-        const historyRes = await client.query(
-          `SELECT new_status FROM parcel_history WHERE parcel_id = $1 ORDER BY changed_at DESC`,
-          [parcelId]
-        );
-        const existingStatuses = historyRes.rows.map((r) => r.new_status);
-
-        if (
-          existingStatuses
-            .map((status) => status.toLowerCase())
-            .includes(parcel_status.toLocaleLowerCase())
-        ) {
-          console.log(
-            `ℹ️ Status "${parcel_status}" already exists for parcel ${tracking_number}. Skipping history & notifications.`
-          );
-          throw new ConflictException({
-            message: `Parcel already has status '${parcel_status}'`,
-          });
-        }
-
-        const last_status = existingStatuses[0] ?? null;
+        // Ensure parcelId is set
+        parcelId = parcelRes.rows[0].id;
+        const last_status = previousStatus ?? null;
 
         // --- Insert history
         await client.query(
           `INSERT INTO parcel_history (parcel_id, old_status, new_status, changed_by)
-           VALUES ($1, $2, $3, $4)`,
+         VALUES ($1, $2, $3, $4)`,
           [parcelId, last_status, parcel_status, "system"]
         );
 
-        // --- Generate notifications and insert into outbox
+        // --- 4. Prepare for Batch Inserts: Notifications and Outbox ---
+        const notificationValues: any[] = [];
         const recipients = [
           { role: "sender", ...sender },
           { role: "receiver", ...receiver },
@@ -154,6 +188,7 @@ export class NotificationsService {
             const destination = ch === "email" ? r.email || "" : r.phone || "";
             if (!destination) continue;
 
+            // 🔑 ENCRYPTION APPLIED HERE
             const encrypted = encryptDestination(destination);
 
             let postOfficeCenter: string | null = null;
@@ -180,69 +215,118 @@ export class NotificationsService {
               ];
             }
 
-            // --- Insert notification
-            const notifRes: QueryResult<{ id: string }> = await client.query(
-              `INSERT INTO notifications (
-                parcel_id, channel, recipient_role, recipient_name, recipient_destination,
-                template_vars, status, attempts, post_office_center, attachments_meta
-              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-              RETURNING id`,
-              [
-                parcelId,
-                ch,
-                r.role,
-                r.name,
-                encrypted,
-                JSON.stringify({
-                  name: r.name,
-                  status: parcel_status,
-                  tracking_number,
-                  amount: amount ?? null,
-                }),
-                "queued",
-                0,
-                postOfficeCenter,
-                attachments ? JSON.stringify(attachments) : null,
-              ]
-            );
+            const templateVars = JSON.stringify({
+              name: r.name,
+              status: parcel_status,
+              tracking_number,
+              amount: amount ?? null,
+            });
 
-            const notif = notifRes.rows[0];
-
-            // --- Insert into outbox table
-            await client.query(
-              `INSERT INTO outbox (
-                notif_id, payload, status, attempts, created_at, updated_at
-              ) VALUES ($1, $2, $3, $4, NOW(), NOW())`,
-              [
-                notif.id,
-                JSON.stringify({
-                  notif_id: notif.id,
-                  parcel_id: parcelId,
-                  channel: ch,
-                  post_office_center: postOfficeCenter,
-                  recipient: {
-                    name: r.name,
-                    role: r.role,
-                    destination,
-                  },
-                  template_vars: {
-                    tracking_number,
-                    status: parcel_status,
-                    amount: amount ?? null,
-                  },
-                  attachments,
-                  created_at: new Date().toISOString(),
-                }),
-                "pending",
-                0,
-              ]
-            );
-
-            logger.info(
-              `✅ Notification created & inserted into outbox: ${notif.id}`
-            );
+            // Collect all values for the notification table insert
+            notificationValues.push([
+              parcelId,
+              ch,
+              r.role,
+              r.name,
+              encrypted, // Encrypted destination
+              templateVars,
+              "queued",
+              0,
+              postOfficeCenter,
+              attachments ? JSON.stringify(attachments) : null,
+              encrypted, // <-- [Index 10]: ENCRYPTED destination for outbox payload construction
+            ]);
           }
         }
+
+        // --- 5. BATCH INSERT NOTIFICATIONS ---
+        if (notificationValues.length === 0) return;
+
+        const notifPlaceholders = notificationValues
+          .map((_, index) => {
+            const start = 10 * index + 1;
+            return `($${start}, $${start + 1}, $${start + 2}, $${start + 3}, $${
+              start + 4
+            }, $${start + 5}, $${start + 6}, $${start + 7}, $${start + 8}, $${
+              start + 9
+            })`;
+          })
+          .join(",");
+
+        const flatNotifValues = notificationValues.flatMap((row) =>
+          row.slice(0, 10)
+        );
+
+        const batchNotifRes: QueryResult<{
+          id: string;
+          post_office_center: string;
+          channel: string;
+          recipient_role: string;
+          recipient_name: string;
+        }> = await client.query(
+          `INSERT INTO notifications (
+          parcel_id, channel, recipient_role, recipient_name, recipient_destination,
+          template_vars, status, attempts, post_office_center, attachments_meta
+        ) VALUES ${notifPlaceholders}
+        RETURNING id, post_office_center, channel, recipient_role, recipient_name`,
+          flatNotifValues
+        );
+
+        const newNotifications = batchNotifRes.rows;
+
+        // --- 6. BATCH INSERT OUTBOX (Using Encrypted Destination) ---
+        const outboxBatchValues = newNotifications.map((notif, index) => {
+          const originalRow = notificationValues[index];
+          const encryptedDestination = originalRow[10]; // ENCRYPTED PII
+          const attachments = originalRow[9]
+            ? JSON.parse(originalRow[9])
+            : undefined;
+
+          // Build the JSON payload
+          const payload = JSON.stringify({
+            notif_id: notif.id,
+            parcel_id: parcelId,
+            channel: notif.channel,
+            post_office_center: notif.post_office_center,
+            recipient: {
+              name: notif.recipient_name,
+              role: notif.recipient_role,
+              destination: encryptedDestination, // ✅ ENCRYPTED PII USED
+            },
+            template_vars: {
+              tracking_number,
+              status: parcel_status,
+              amount: amount ?? null,
+            },
+            attachments,
+            created_at: new Date().toISOString(),
+          });
+
+          // Values for the outbox table columns
+          return [notif.id, payload, "pending", 0];
+        });
+
+        const outboxPlaceholders = outboxBatchValues
+          .map(
+            (_, index) =>
+              `($${4 * index + 1}, $${4 * index + 2}, $${4 * index + 3}, $${
+                4 * index + 4
+              }, NOW(), NOW())`
+          )
+          .join(",");
+
+        const flatOutboxValues = outboxBatchValues.flatMap((row) => row);
+
+        await client.query(
+          `INSERT INTO outbox (
+          notif_id, payload, status, attempts, created_at, updated_at
+        ) VALUES ${outboxPlaceholders}`,
+          flatOutboxValues
+        );
+
+        logger.info(
+          `✅ Successfully batched and inserted ${newNotifications.length} notifications into outbox.`
+        );
       });
     } catch (err: unknown) {
       if (err instanceof HttpException) {

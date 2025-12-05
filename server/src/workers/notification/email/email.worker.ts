@@ -6,6 +6,7 @@ import { toTitleCase } from "../../../helpers/convertToTitleCase";
 import Bottleneck from "bottleneck";
 import { query as dbQuery } from "../../../utils/db";
 import { generateReceiptPDF } from "../../../helpers/generateReceiptPDF";
+import { decryptDestination } from "../../../modules/notifications/utils/crypto";
 
 interface Recipient {
   role?: "sender" | "receiver";
@@ -161,7 +162,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const destination = job.recipient?.destination;
+    const destination = decryptDestination(job.recipient?.destination);
     if (!destination) {
       await dbQuery(
         "UPDATE notifications SET status=$1, last_error=$2, updated_at=now() WHERE id=$3",

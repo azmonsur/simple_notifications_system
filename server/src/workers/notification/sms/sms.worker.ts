@@ -5,6 +5,7 @@ import { query as dbQuery } from "../../../utils/db";
 import SendSMSTermii from "../../../helpers/sendSMSTermii";
 import Bottleneck from "bottleneck";
 import { logger } from "../../../utils/logger";
+import { decryptDestination } from "../../../modules/notifications/utils/crypto";
 
 // --- Interfaces ---
 interface Recipient {
@@ -187,7 +188,7 @@ export class SmsWorkerService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const response = await SendSMSTermii({
-        to: job.recipient.destination,
+        to: decryptDestination(job.recipient.destination),
         body,
       });
 

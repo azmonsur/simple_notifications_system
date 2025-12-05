@@ -9,6 +9,7 @@ import {
   IsIn,
   IsNumber,
   Min,
+  IsBoolean,
 } from "class-validator";
 import { Type } from "class-transformer";
 
@@ -59,6 +60,9 @@ export class NotificationEventDto {
   @IsNumber()
   @Min(0)
   amount?: number;
+
+  @IsBoolean()
+  recall!: Boolean;
 
   @IsOptional()
   @IsString()

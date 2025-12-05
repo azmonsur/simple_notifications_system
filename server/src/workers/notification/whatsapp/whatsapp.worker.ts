@@ -3,18 +3,19 @@ import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
 import { logger } from "../../../utils/logger";
 import SendWhatsAppCloud from "../../../helpers/sendWhatsappCloud";
 import { query as dbQuery } from "../../../utils/db";
+import { decryptDestination } from "../../../modules/notifications/utils/crypto";
 
 // --- Interfaces ---
 interface Recipient {
   name?: string;
   destination: string;
+  role?: "sender" | "receiver";
 }
 
 interface TemplateVars {
   tracking_number?: string;
   status?: string;
   amount?: number;
-  role?: "sender" | "receiver";
 }
 
 interface WhatsAppJob {
@@ -79,9 +80,10 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private getTemplateName(job: WhatsAppJob): string {
-    const { role, status } = job.template_vars;
+    const { status } = job.template_vars;
+    const { role } = job.recipient;
 
-    if (role === "sender" && status === "pending") return "sender_queued";
+    if (role === "sender" && status === "pending") return "sender_queued_now";
     if (role === "receiver" && status === "pending") return "receiver_queued";
     if ((role === "sender" || role === "receiver") && status === "dispatched")
       return "dispatched_update";
@@ -103,7 +105,7 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
     return {
       customerName: recipient.name || "Customer",
       trackingNumber: template_vars.tracking_number || "N/A",
-      status: template_vars.status || "N/A",
+      // status: template_vars.status || "N/A",
       formattedAmount: (formattedAmount ?? 0).toString(),
     };
   }
@@ -124,13 +126,15 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
     const attempts = job.attempts ?? 0;
     const nextAttempts = attempts + 1;
 
+    console.log("template name: ", this.getTemplateName(job));
+
     if (!job.recipient?.destination) {
       await this.markFailed(job.notif_id, "Missing recipient");
       this.channel.ack(msg);
       return;
     }
 
-    const phone = job.recipient.destination;
+    const phone = decryptDestination(job.recipient.destination);
     const useTemplate = process.env.WHATSAPP_USE_TEMPLATE === "true";
 
     const messageOptions = useTemplate
@@ -203,7 +207,7 @@ export class WhatsappWorkerService implements OnModuleInit, OnModuleDestroy {
     logger.warn(
       JSON.stringify({
         notif_id: job.notif_id,
-        to: job.recipient?.destination,
+        to: decryptDestination(job.recipient?.destination),
         reason,
         attempts,
       })
