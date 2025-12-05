@@ -17,6 +17,7 @@
     "start:dlr-whatsapp-worker": "ts-node src/dlr.whatsapp.worker.main.ts",
     "start:cleanup-worker": "ts-node src/cleanup-requeue.worker.main.ts",
     "start:outbox-worker": "ts-node src/outbox.publisher.worker.main.ts",
+    "start:audit-worker": "ts-node src/audit.worker.main.ts",
     "start:sms-worker:prod": "node dist/sms.worker.main.js",
     "start:email-worker:prod": "node dist/email.worker.main.js",
     "start:whatsapp-worker:prod": "node dist/whatsapp.worker.main.js",
@@ -25,8 +26,9 @@
     "start:dlr-whatsapp-worker:prod": "node dist/dlr.whatsapp.worker.main.js",
     "start:cleanup-worker:prod": "node dist/cleanup-requeue.worker.main.js",
     "start:outbox-worker:prod": "node dist/outbox.publisher.worker.main.js",
-    "start:all-workers": "concurrently -n SMS,EMAIL,WHATSAPP,CLEANUP,OUTBOX,DLR-T,DLR-S,DLR-W -c blue,green,magenta,cyan,yellow,red,white,gray \"npm run start:sms-worker\" \"npm run start:email-worker\" \"npm run start:whatsapp-worker\" \"npm run start:cleanup-worker\" \"npm run start:outbox-worker\" \"npm run start:dlr-termii-worker\" \"npm run start:dlr-sendgrid-worker\" \"npm run start:dlr-whatsapp-worker\"",
-    "start:all-workers:prod": "concurrently -n SMS,EMAIL,WHATSAPP,CLEANUP,OUTBOX,DLR-T,DLR-S,DLR-W -c blue,green,magenta,cyan,yellow,red,white,gray \"npm run start:sms-worker:prod\" \"npm run start:email-worker:prod\" \"npm run start:whatsapp-worker:prod\" \"npm run start:cleanup-worker:prod\" \"npm run start:outbox-worker:prod\" \"npm run start:dlr-termii-worker:prod\" \"npm run start:dlr-sendgrid-worker:prod\" \"npm run start:dlr-whatsapp-worker:prod\""
+    "start:audit-worker:prod": "node dist/audit.worker.main.js",
+    "start:all-workers": "concurrently -n SMS,EMAIL,WHATSAPP,CLEANUP,OUTBOX,DLR-T,DLR-S,DLR-W -c blue,green,magenta,cyan,yellow,red,white,gray \"npm run start:sms-worker\" \"npm run start:email-worker\" \"npm run start:whatsapp-worker\" \"npm run start:cleanup-worker\" \"npm run start:outbox-worker\" \"npm run start:dlr-termii-worker\" \"npm run start:dlr-sendgrid-worker\" \"npm run start:dlr-whatsapp-worker\" \"npm run start:audit-worker\"",
+    "start:all-workers:prod": "concurrently -n SMS,EMAIL,WHATSAPP,CLEANUP,OUTBOX,DLR-T,DLR-S,DLR-W -c blue,green,magenta,cyan,yellow,red,white,gray \"npm run start:sms-worker:prod\" \"npm run start:email-worker:prod\" \"npm run start:whatsapp-worker:prod\" \"npm run start:cleanup-worker:prod\" \"npm run start:outbox-worker:prod\" \"npm run start:dlr-termii-worker:prod\" \"npm run start:dlr-sendgrid-worker:prod\" \"npm run start:dlr-whatsapp-worker:prod\" \"npm run start:audit-worker:prod\""
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

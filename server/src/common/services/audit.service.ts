@@ -1,0 +1,55 @@
+import { Injectable, Logger } from "@nestjs/common";
+import Redis from "ioredis";
+
+import { logger } from "../../utils/logger";
+
+@Injectable()
+export class RedisAuditService {
+  private readonly redis: InstanceType<typeof Redis> | null;
+  private readonly channel: string;
+
+  constructor() {
+    const url = process.env.REDIS_URL;
+    this.channel = process.env.AUDIT_LOG_CHANNEL || "audit:events";
+    if (url) {
+      this.redis = new Redis(url);
+      //   logger.info("Connected to Redis server");
+      this.redis.on("error", (e: any) => logger.error("Redis audit error", e));
+    } else {
+      this.redis = null;
+      logger.warn("No REDIS_URL configured — using local audit logs only");
+    }
+  }
+
+  async audit(event: {
+    actor?: string; // userId or system
+    action: string;
+    resource?: string;
+    ip?: string;
+    userAgent?: string;
+    meta?: Record<string, any>;
+    timestamp?: string;
+  }) {
+    const payload = {
+      actor: event.actor || "system",
+      action: event.action,
+      resource: event.resource || null,
+      ip: event.ip || null,
+      userAgent: event.userAgent || null,
+      meta: event.meta || {},
+      timestamp: event.timestamp || new Date().toISOString(),
+    };
+
+    // Publish to Redis channel for async processing
+    if (this.redis) {
+      try {
+        await this.redis.publish(this.channel, JSON.stringify(payload));
+      } catch (err) {
+        logger.error("Failed to publish audit event to redis", err);
+      }
+    }
+
+    // Always write to local structured log as fallback
+    // logger.info({ audit: payload });
+  }
+}

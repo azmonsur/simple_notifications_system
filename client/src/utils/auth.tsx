@@ -1,42 +1,54 @@
-import { useState, useEffect } from "react";
+// src/utils/auth.ts
+import { createContext, useContext, useState, ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 
-export function useAuth() {
-  const [token, setToken] = useState<string | null>(
-    localStorage.getItem("auth_token")
+interface AuthContextType {
+  accessToken: string | null;
+  login: (token: string) => void;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+let globalLogout: (() => void) | null = null;
+
+export const setGlobalLogout = (fn: () => void) => {
+  globalLogout = fn;
+};
+
+export const triggerLogout = () => {
+  if (globalLogout) globalLogout();
+};
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const navigate = useNavigate();
+  const [accessToken, setAccessToken] = useState<string | null>(
+    localStorage.getItem("accessToken")
   );
 
-  useEffect(() => {
-    // Update token when "auth-changed" event happens (same tab)
-    const handler = () => {
-      setToken(localStorage.getItem("auth_token"));
-    };
-
-    window.addEventListener("auth-changed", handler);
-
-    // Update token when storage changes in other tabs
-    window.addEventListener("storage", handler);
-
-    return () => {
-      window.removeEventListener("auth-changed", handler);
-      window.removeEventListener("storage", handler);
-    };
-  }, []);
-
-  const broadcast = () => {
-    window.dispatchEvent(new Event("auth-changed"));
+  const login = (token: string) => {
+    localStorage.setItem("accessToken", token);
+    setAccessToken(token);
   };
 
-  return {
-    token,
-    login: (t: string) => {
-      localStorage.setItem("auth_token", t);
-      setToken(t);
-      broadcast(); // notify UI immediately
-    },
-    logout: () => {
-      localStorage.removeItem("auth_token");
-      setToken(null);
-      broadcast(); // notify UI immediately
-    },
+  const logout = () => {
+    localStorage.removeItem("accessToken");
+    setAccessToken(null);
+    navigate("/login");
   };
-}
+
+  // expose global logout for API interceptor
+  setGlobalLogout(logout);
+
+  return (
+    <AuthContext.Provider value={{ accessToken, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth must be used within AuthProvider");
+  return context;
+};

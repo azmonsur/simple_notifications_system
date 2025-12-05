@@ -126,6 +126,22 @@ CREATE INDEX idx_webhook_logs_created_at ON webhook_logs(created_at);
 
 
 ----------------------------------------------------
+-- TABLE: audit_logs
+----------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor VARCHAR(255),
+  action VARCHAR(255) NOT NULL,
+  resource VARCHAR(255),
+  ip VARCHAR(100),
+  user_agent TEXT,
+  meta JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+
+----------------------------------------------------
 -- TABLE: notifications_archive
 ----------------------------------------------------
 -- Create archive table if it doesn't exist
@@ -138,3 +154,12 @@ CREATE TABLE IF NOT EXISTS notifications_archive (
 CREATE INDEX IF NOT EXISTS idx_notifications_archive_parcel_id ON notifications_archive (parcel_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_archive_status ON notifications_archive (status);
 CREATE INDEX IF NOT EXISTS idx_notifications_archive_created_at ON notifications_archive (created_at);
+
+
+--GRANT SELECT ON TABLE table_name TO username;
+
+-- Grant INSERT, UPDATE, DELETE
+--GRANT INSERT, UPDATE, DELETE ON TABLE table_name TO username;
+
+-- Grant all privileges
+--GRANT ALL PRIVILEGES ON TABLE table_name TO username;

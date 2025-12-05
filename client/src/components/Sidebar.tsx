@@ -47,26 +47,26 @@ export default function Sidebar({ darkMode, setDarkMode }: SidebarProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false); // mobile menu toggle
 
-  const { token, logout } = auth;
+  const { accessToken, logout } = auth;
 
-  useEffect(() => {
-    if (!token) return;
+  // useEffect(() => {
+  //   if (!accessToken) return;
 
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    const expiry = payload.exp * 1000;
-    const timeout = expiry - Date.now();
+  //   const payload = JSON.parse(atob(accessToken.split(".")[1]));
+  //   const expiry = payload.exp * 1000;
+  //   const timeout = expiry - Date.now();
 
-    if (timeout <= 0) {
-      logout();
-      return;
-    }
+  //   if (timeout <= 0) {
+  //     logout();
+  //     return;
+  //   }
 
-    const timer = setTimeout(() => {
-      logout();
-    }, timeout);
+  //   const timer = setTimeout(() => {
+  //     logout();
+  //   }, timeout);
 
-    return () => clearTimeout(timer);
-  }, [token]);
+  //   return () => clearTimeout(timer);
+  // }, [accessToken]);
 
   return (
     <>
@@ -157,7 +157,7 @@ export default function Sidebar({ darkMode, setDarkMode }: SidebarProps) {
         </nav>
 
         {/* Footer */}
-        {auth.token && (
+        {auth.accessToken && (
           <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={() => {

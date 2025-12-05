@@ -9,6 +9,7 @@ import cookieParser from "cookie-parser";
 import csurf from "csurf";
 import { HttpsOptions } from "@nestjs/common/interfaces/external/https-options.interface";
 import { readFileSync, existsSync } from "fs";
+import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
 // import { setup } from "../src/database/setup-db";
 import os from "os";
 
@@ -87,6 +88,7 @@ function getHttpsOptions(): HttpsOptions | undefined {
       "ECDHE-RSA-AES256-GCM-SHA384",
     ].join(":"),
     honorCipherOrder: true,
+    rejectUnauthorized: true,
     // minVersion: "TLSv1.2" as const,
   };
 }
@@ -178,7 +180,7 @@ async function bootstrap() {
       logger: isProduction
         ? ["error", "warn"]
         : ["error", "warn", "log", "debug"],
-      // httpsOptions,
+      httpsOptions,
       bodyParser: false,
     });
 
@@ -200,11 +202,7 @@ async function bootstrap() {
             objectSrc: ["'none'"],
             mediaSrc: ["'self'"],
             frameSrc: ["'none'"],
-            connectSrc: [
-              "'self'",
-              "https://api.yoursite.com", // Your API
-              "wss://api.yoursite.com", // WebSockets if needed
-            ],
+            // connectSrc: ["'self'"],
           },
         },
         crossOriginEmbedderPolicy: true,
@@ -217,7 +215,7 @@ async function bootstrap() {
         },
         referrerPolicy: { policy: "strict-origin-when-cross-origin" },
         noSniff: true,
-        xssFilter: true,
+        // xssFilter: true,
       })
     );
 
@@ -229,7 +227,7 @@ async function bootstrap() {
     if (allowedOrigins && allowedOrigins.length > 0) {
       app.enableCors({
         origin: (origin, callback) => {
-          // Allow requests with no origin (mobile apps, curl, etc.)
+          // Allow requests with no origin (mobile apps, curl, POSTMAN, etc.)
           if (!origin) return callback(null, true);
 
           if (allowedOrigins.includes(origin)) {
@@ -297,7 +295,7 @@ async function bootstrap() {
               whitelistedIps.length > 0 &&
               whitelistedIps.includes(clientIp)
             ) {
-              return Infinity; // 0 means no limit
+              return 10000; // 0 means no limit
             }
 
             return rateLimitMax;
@@ -327,6 +325,9 @@ async function bootstrap() {
         },
       })
     );
+
+    // Global exception filter
+    app.useGlobalFilters(new AllExceptionsFilter());
 
     // Compression
     app.use(

@@ -6,15 +6,9 @@ import MessageQueue from "./pages/MessageQueue";
 import FailedMessages from "./pages/FailedMessages";
 import WebhookDLR from "./pages/WebhookDLR";
 import Login from "./pages/Login";
-import { useAuth } from "./utils/auth";
 import NotFound from "./pages/NotFound";
 import LiveMetricsDashboard from "./pages/Metrics";
-
-function Protected({ children }: { children: JSX.Element }) {
-  const { token } = useAuth();
-  if (!token) return <Navigate to="/login" replace />;
-  return children;
-}
+import Protected from "./utils/Protected";
 
 export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(
