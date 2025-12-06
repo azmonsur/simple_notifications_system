@@ -78,7 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_updated_at ON notifications (update
 ----------------------------------------------------
 -- TABLE: outbox
 ----------------------------------------------------
-CREATE TABLE outbox (
+CREATE TABLE IF NOT EXISTS outbox (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     notif_id uuid NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
     payload JSONB NOT NULL,

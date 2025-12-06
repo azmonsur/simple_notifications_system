@@ -9,7 +9,13 @@ export class RedisAuditService {
   private readonly channel: string;
 
   constructor() {
-    const url = process.env.REDIS_URL;
+    const url =
+      process.env.NODE_ENV === "development"
+        ? process.env.REDIS_URL_DEV
+        : process.env.REDIS_URL_PROD;
+
+    console.log(url);
+
     this.channel = process.env.AUDIT_LOG_CHANNEL || "audit:events";
     if (url) {
       this.redis = new Redis(url);

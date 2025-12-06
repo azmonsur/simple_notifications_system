@@ -20,10 +20,13 @@ export class GlobalSchedulerService implements OnModuleInit {
   private readonly LOCK_TTL = 60; // Lock expires in 60 seconds
 
   constructor() {
+    const url =
+      process.env.NODE_ENV === "development"
+        ? process.env.REDIS_URL_DEV
+        : process.env.REDIS_URL_PROD;
+
     // Connect to Redis using env variable
-    const redisInstance = new Redis(
-      process.env.REDIS_URL as string
-    ) as GlobalSchedulerRedis;
+    const redisInstance = new Redis(url as string) as GlobalSchedulerRedis;
 
     // 2. Define the custom command for atomic lock deletion
     // This script ensures that a lock is only released by the instance that set it.
