@@ -1,9 +1,12 @@
+// src/modules/auth/jwt-auth.guard.ts
 import {
+  Injectable,
   CanActivate,
   ExecutionContext,
-  Injectable,
   UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
 import { AuthService, JwtCustomPayload } from "./auth.service";
 import { Request } from "express";
 
@@ -13,10 +16,14 @@ export interface AuthRequest extends Request {
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly reflector: Reflector
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const req: AuthRequest = context.switchToHttp().getRequest();
+
     const authHeader =
       req.headers["authorization"] || req.headers["Authorization"];
     if (!authHeader)
@@ -25,19 +32,37 @@ export class JwtAuthGuard implements CanActivate {
     const token = Array.isArray(authHeader)
       ? authHeader[0].split(" ")[1]
       : authHeader.split(" ")[1];
-
     if (!token)
       throw new UnauthorizedException("Malformed authorization header");
 
     try {
-      // Use the new type-safe access token verifier
-      const payload = this.authService.verifyAccessToken(token);
+      // ✅ Stateless: just verify the JWT signature and expiration
+      const payload: JwtCustomPayload =
+        this.authService.verifyAccessToken(token);
 
       // Attach payload to request
       req.user = payload;
 
+      // Optional role check
+      const requiredRoles = this.reflector.get<string[]>(
+        "roles",
+        context.getHandler()
+      );
+      if (
+        requiredRoles &&
+        requiredRoles.length > 0 &&
+        !requiredRoles.includes(payload.role)
+      ) {
+        throw new ForbiddenException("Insufficient permissions");
+      }
+
       return true;
     } catch (err) {
+      if (
+        err instanceof UnauthorizedException ||
+        err instanceof ForbiddenException
+      )
+        throw err;
       throw new UnauthorizedException("Invalid access token");
     }
   }

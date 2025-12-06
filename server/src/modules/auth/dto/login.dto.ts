@@ -1,11 +1,11 @@
 // src/dto/notifications.dto.ts
-import { IsString, Min } from "class-validator";
+import { IsEmail, IsNotEmpty, IsString, Min } from "class-validator";
 
 // Main DTO
 export class CreateLoginDto {
-  @IsString()
+  @IsEmail({}, { message: "Invalid email address" })
   email!: string;
 
-  @IsString()
+  @IsNotEmpty({ message: "Password is required" })
   password!: string;
 }

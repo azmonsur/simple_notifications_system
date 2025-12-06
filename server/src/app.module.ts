@@ -8,6 +8,7 @@ import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { UserModule } from "./modules/users/user.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { WebhookModule } from "./modules/webhook/webhook.module";
+import { CommonModule } from "./common/common.module";
 import { DlrAnalyticsModule } from "./modules/dlr_analytics/dlr.analytics.module";
 import { AdminModule } from "./admin/admin.module";
 import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard";
@@ -32,6 +33,7 @@ import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
     WebhookModule,
     DlrAnalyticsModule,
     UserModule,
+    CommonModule,
   ],
   providers: [
     // ✅ Apply LoggingThrottlerGuard globally

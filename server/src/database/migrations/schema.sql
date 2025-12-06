@@ -89,7 +89,7 @@ CREATE TABLE outbox (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_outbox_status_created
+CREATE INDEX IF NOT EXISTS idx_outbox_status_created
 ON outbox(status, created_at);
 
 ----------------------------------------------------
@@ -116,13 +116,13 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
 );
 
 -- For fast lookup by provider + message_id
-CREATE INDEX idx_webhook_logs_provider_message ON webhook_logs(provider, message_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_provider_message ON webhook_logs(provider, message_id);
 
 -- For querying by recipient & status
-CREATE INDEX idx_webhook_logs_recipient_status ON webhook_logs(recipient, status);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_recipient_status ON webhook_logs(recipient, status);
 
 -- Optional: time-based queries
-CREATE INDEX idx_webhook_logs_created_at ON webhook_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_created_at ON webhook_logs(created_at);
 
 
 ----------------------------------------------------
@@ -156,10 +156,97 @@ CREATE INDEX IF NOT EXISTS idx_notifications_archive_status ON notifications_arc
 CREATE INDEX IF NOT EXISTS idx_notifications_archive_created_at ON notifications_archive (created_at);
 
 
---GRANT SELECT ON TABLE table_name TO username;
+----------------------------------------------------
+-- TABLE: roles
+----------------------------------------------------
 
--- Grant INSERT, UPDATE, DELETE
---GRANT INSERT, UPDATE, DELETE ON TABLE table_name TO username;
+CREATE TABLE IF NOT EXISTS roles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(50) UNIQUE NOT NULL,   -- e.g., 'admin', 'manager', 'staff'
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+); 
 
--- Grant all privileges
---GRANT ALL PRIVILEGES ON TABLE table_name TO username;
+
+----------------------------------------------------
+-- TABLE: users
+----------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    gender VARCHAR(10),
+    role_id UUID NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+    last_login_at TIMESTAMPTZ,
+    last_login_ip INET,
+    last_login_location TEXT,
+    failed_login_count INT DEFAULT 0,
+    account_locked_until TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Optional: Indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+
+----------------------------------------------------
+-- TABLE: refresh_tokens
+----------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    revoked_at TIMESTAMP WITH TIME ZONE,
+    replaced_by_token_id uuid REFERENCES refresh_tokens(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+
+
+----------------------------------------------------
+-- TABLE: user_sessions
+----------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ip_address INET,
+    location TEXT,
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    revoked_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON user_sessions(user_id);
+
+
+----------------------------------------------------
+-- TABLE: password_reset_tokens
+----------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+
+--GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE password_reset_tokens TO notif;
+--GRANT ALL PRIVILEGES ON TABLE password_reset_tokens TO notif;
+
+
+

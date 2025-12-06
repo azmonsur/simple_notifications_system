@@ -19,35 +19,41 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const isHttp = exception instanceof HttpException;
     const status = isHttp
-      ? (exception as HttpException).getStatus()
+      ? exception.getStatus()
       : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message = isHttp
-      ? (exception as HttpException).getResponse()
-      : "Internal server error";
+    const response = isHttp ? exception.getResponse() : null;
 
-    // Log full details server-side (logs should not be exposed to clients)
+    const extractedMessage =
+      typeof response === "string"
+        ? response
+        : response && (response as any).message
+        ? (response as any).message
+        : "An error occurred";
+
+    // Log full details server-side
     this.logger.error({
       path: req.path,
       method: req.method,
       status,
-      message: exception instanceof Error ? exception.stack : exception,
+      error: exception instanceof Error ? exception.stack : exception,
     });
 
-    // Return sanitized response
+    const isProd = process.env.NODE_ENV === "production";
+
     res.status(status).json({
       success: false,
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: req.path,
-      message:
-        process.env.NODE_ENV === "production"
-          ? status === HttpStatus.INTERNAL_SERVER_ERROR
-            ? "Internal server error"
-            : typeof message === "string"
-            ? message
-            : (message as any).message
-          : message,
+
+      // 👇 PRODUCTION — return ONLY cleaned message
+      message: isProd
+        ? status === 500
+          ? "Internal server error"
+          : extractedMessage
+        : // 👇 DEVELOPMENT — return full original exception response
+          response ?? extractedMessage,
     });
   }
 }
