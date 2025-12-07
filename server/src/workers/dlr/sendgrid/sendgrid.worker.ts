@@ -38,7 +38,6 @@ export class SendGridDlrWorkerService implements OnModuleInit, OnModuleDestroy {
     let payload;
     try {
       payload = JSON.parse(msg.content.toString());
-      console.log("Parsed SendGrid DLR payload:", payload);
     } catch (err) {
       logger.error("❌ Invalid SendGrid DLR JSON", err);
       return this.safeNack(msg, false, false);

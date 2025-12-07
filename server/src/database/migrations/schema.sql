@@ -223,9 +223,16 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     ip_address INET,
     location TEXT,
     user_agent TEXT,
+    refresh_token_id UUID,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    revoked_at TIMESTAMP WITH TIME ZONE
+    revoked_at TIMESTAMP WITH TIME ZONE,
+
+    
+    CONSTRAINT fk_refresh_token
+        FOREIGN KEY (refresh_token_id)
+        REFERENCES refresh_tokens(id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON user_sessions(user_id);

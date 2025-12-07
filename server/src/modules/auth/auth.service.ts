@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import jwt, { JwtPayload, Secret } from "jsonwebtoken";
 import * as bcrypt from "bcrypt";
+import * as argon2 from "argon2";
 import { CreateLoginDto } from "./dto/login.dto";
 import { CreateSignupDto } from "./dto/signup.dto";
 import { RedisAuditService } from "../../common/services/audit.service";
@@ -16,7 +17,7 @@ import { QueryResult, PoolClient } from "pg";
 import crypto from "crypto";
 import SendEmailSendGrid from "../../helpers/sendEmailSendgrid";
 import geoip from "geoip-lite";
-import { Request } from "express";
+import { Request, Response } from "express";
 
 export interface JwtCustomPayload extends JwtPayload {
   sub: string; // will hold user id (UUID)
@@ -91,7 +92,7 @@ export class AuthService {
         try {
           // Fetch user and role (role name) — sub will be user.id
           const res: QueryResult = await client.query(
-            `SELECT u.id, u.email, u.password_hash, r.name as role
+            `SELECT u.id, u.email, u.failed_login_count, u.account_locked_until, u.password_hash, r.name as role
              FROM users u
              JOIN roles r ON u.role_id = r.id
              WHERE u.email = $1`,
@@ -112,9 +113,13 @@ export class AuthService {
           const user = res.rows[0];
 
           // Verify password using bcrypt
-          const passwordMatches = await bcrypt.compare(
-            password,
-            user.password_hash
+          // const passwordMatches = await bcrypt.compare(
+          //   password,
+          //   user.password_hash
+          // );
+          const passwordMatches = await argon2.verify(
+            user.password_hash,
+            password
           );
           if (!passwordMatches) {
             // audit failed attempt
@@ -127,7 +132,45 @@ export class AuthService {
             });
 
             // Optionally update failed_login_count/account_locked_until here (not required)
+            await dbQuery(
+              `UPDATE users SET failed_login_count = failed_login_count + 1 WHERE id = $1`,
+              [user.id]
+            );
+
             throw new UnauthorizedException("Invalid credentials");
+          }
+
+          if (
+            user.account_locked_until &&
+            new Date(Date.now()) > user.account_locked_until
+          ) {
+            await dbQuery(
+              `UPDATE users SET failed_login_count = 0, account_locked_until = $1 WHERE id = $2`,
+              [null, user.id]
+            );
+          }
+
+          if (user.failed_login_count > 3) {
+            await this.redisAuthService.audit({
+              actor: email,
+              action: "login.failed",
+              ip,
+              userAgent: req.headers["user-agent"],
+              meta: {
+                reason: `Maximum login atempts reached, user can login by ${new Date(
+                  Date.now() + 15 * 60 * 1000
+                )}`,
+              },
+            });
+
+            if (!user.account_locked_until) {
+              await dbQuery(
+                `UPDATE users SET account_locked_until = $1 WHERE id = $2`,
+                [new Date(Date.now() + 15 * 60 * 1000), user.id]
+              );
+            }
+
+            throw new UnauthorizedException("Login not allowed this time");
           }
 
           // Successful login audit
@@ -151,26 +194,32 @@ export class AuthService {
 
           // Update last login info and then insert token (atomic)
           await client.query(
-            `UPDATE users SET last_login_at = NOW(), last_login_ip = $1, last_login_location = $2, updated_at = NOW() WHERE id = $3`,
-            [ip, location, user.id]
+            `UPDATE users SET last_login_at = NOW(), last_login_ip = $1, last_login_location = $2, updated_at = NOW(),
+             failed_login_count = 0, account_locked_until = $3 WHERE id = $4`,
+            [ip, location, null, user.id]
           );
 
+          // Insert refresh token first and get its ID
+          const insertTokenResult = await client.query(
+            `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+              VALUES ($1, $2, $3)
+              RETURNING id`,
+            [user.id, tokenHash, expiresAt]
+          );
+          const refreshTokenId = insertTokenResult.rows[0].id;
+
+          // Insert user session linked to this refresh token
           await client.query(
-            `INSERT INTO user_sessions (user_id, ip_address, location, user_agent, expires_at)
-   VALUES ($1, $2, $3, $4, $5)`,
+            `INSERT INTO user_sessions (user_id, ip_address, location, user_agent, expires_at, refresh_token_id)
+              VALUES ($1, $2, $3, $4, $5, $6)`,
             [
               user.id,
               ip,
               location,
               req.headers["user-agent"],
               new Date(Date.now() + this.refreshTokenExpiryMs()),
+              refreshTokenId,
             ]
-          );
-
-          await client.query(
-            `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-             VALUES ($1, $2, $3)`,
-            [user.id, tokenHash, expiresAt]
           );
 
           return { accessToken, refreshToken };
@@ -227,7 +276,13 @@ export class AuthService {
           }
 
           // Hash password using bcrypt
-          const passwordHash = await bcrypt.hash(password, 12);
+          // const passwordHash = await bcrypt.hash(password, 12)
+          const passwordHash = await argon2.hash(password, {
+            type: argon2.argon2id,
+            memoryCost: 2 ** 16,
+            timeCost: 5,
+            parallelism: 1,
+          });
 
           // Resolve roleName -> role_id
           const roleRes = await client.query(
@@ -266,22 +321,27 @@ export class AuthService {
             [ip, location, user.id]
           );
 
+          // Store refresh token (hashed) in DB and get its ID
+          const insertTokenRes = await client.query(
+            `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+              VALUES ($1, $2, $3)
+              RETURNING id`,
+            [user.id, tokenHash, expiresAt]
+          );
+          const refreshTokenId = insertTokenRes.rows[0].id;
+
+          // Insert user session linked to this refresh token
           await client.query(
-            `INSERT INTO user_sessions (user_id, ip_address, location, user_agent, expires_at)
-   VALUES ($1, $2, $3, $4, $5)`,
+            `INSERT INTO user_sessions (user_id, ip_address, location, user_agent, expires_at, refresh_token_id)
+                VALUES ($1, $2, $3, $4, $5, $6)`,
             [
               user.id,
               ip,
               location,
               req.headers["user-agent"],
               new Date(Date.now() + this.refreshTokenExpiryMs()),
+              refreshTokenId,
             ]
-          );
-
-          await client.query(
-            `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-             VALUES ($1, $2, $3)`,
-            [user.id, tokenHash, expiresAt]
           );
 
           // Audit signup
@@ -351,12 +411,13 @@ export class AuthService {
       // Hash provided token
       const tokenHash = this.hashToken(token);
 
-      // Query DB for this token hash and user
       const res = await dbQuery(
-        `SELECT id, token_hash, revoked_at, expires_at, replaced_by_token_id
-         FROM refresh_tokens
-         WHERE user_id = $1 AND token_hash = $2
-         LIMIT 1`,
+        `SELECT rt.id, rt.user_id, rt.revoked_at, rt.expires_at, rt.replaced_by_token_id
+        FROM refresh_tokens rt
+        INNER JOIN user_sessions us
+        ON us.refresh_token_id = rt.id
+        WHERE rt.user_id = $1 AND rt.token_hash = $2
+        ORDER BY rt.created_at DESC LIMIT 1`,
         [userId, tokenHash]
       );
 
@@ -368,11 +429,21 @@ export class AuthService {
 
       // Check expiration (DB-level)
       if (new Date(row.expires_at) < new Date()) {
+        await dbQuery(
+          `DELETE FROM user_sessions
+           WHERE refresh_token_id = $1`,
+          [row.id]
+        );
         throw new UnauthorizedException("Refresh token expired");
       }
 
       // Revoked?
       if (row.revoked_at) {
+        await dbQuery(
+          `DELETE FROM user_sessions
+           WHERE refresh_token_id = $1`,
+          [row.id]
+        );
         throw new UnauthorizedException("Refresh token revoked");
       }
 
@@ -463,6 +534,12 @@ export class AuthService {
           // Link old token to new token via replaced_by_token_id
           await client.query(
             `UPDATE refresh_tokens SET replaced_by_token_id = $1 WHERE id = $2`,
+            [newRowId, oldRow.id]
+          );
+
+          // Update user session
+          await client.query(
+            `UPDATE user_sessions SET refresh_token_id = $1 WHERE refresh_token_id = $2`,
             [newRowId, oldRow.id]
           );
 
@@ -577,6 +654,7 @@ export class AuthService {
   }
 
   // Reset password
+  // Reset password
   async resetPassword(
     email: string,
     token: string,
@@ -595,87 +673,240 @@ export class AuthService {
 
     try {
       return await this.withTransaction(async (client) => {
-        // Find user
+        // --- Find user ---
         const res = await client.query(
-          `SELECT id FROM users WHERE email = $1`,
+          `SELECT id, first_name FROM users WHERE email = $1`,
           [email]
         );
+
         if (res.rows.length === 0) {
+          await this.redisAuthService.audit({
+            actor: email,
+            action: "password-reset.failed",
+            ip,
+            userAgent,
+            meta: { reason: "User not found" },
+          });
           throw new UnauthorizedException("Invalid reset token or email");
         }
-        const userId = res.rows[0].id;
 
-        // Verify token
+        const user = res.rows[0];
+        const userId = user.id;
+
+        // --- Verify token ---
         const tokenHash = this.hashToken(token);
         const tokenRes = await client.query(
-          `SELECT id, expires_at, used_at FROM password_reset_tokens 
-         WHERE user_id = $1 AND token_hash = $2`,
+          `SELECT id, expires_at, used_at 
+         FROM password_reset_tokens 
+         WHERE user_id = $1 AND token_hash = $2
+         FOR UPDATE`,
           [userId, tokenHash]
         );
-        if (tokenRes.rows.length === 0)
+
+        if (tokenRes.rows.length === 0) {
           throw new UnauthorizedException("Invalid reset token or email");
+        }
 
         const resetToken = tokenRes.rows[0];
-        if (resetToken.used_at)
-          throw new UnauthorizedException("Token already used");
-        if (new Date(resetToken.expires_at) < new Date())
-          throw new UnauthorizedException("Token expired");
 
-        // Update password
-        const passwordHash = await bcrypt.hash(newPassword, 12);
+        if (resetToken.used_at) {
+          throw new UnauthorizedException("Token already used");
+        }
+
+        if (new Date(resetToken.expires_at) < new Date()) {
+          throw new UnauthorizedException("Token expired");
+        }
+
+        // --- Update password (use argon2 for consistency) ---
+        const passwordHash = await argon2.hash(newPassword, {
+          type: argon2.argon2id,
+          memoryCost: 2 ** 16,
+          timeCost: 5,
+          parallelism: 1,
+        });
+
         await client.query(
-          `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+          `UPDATE users 
+         SET password_hash = $1, updated_at = NOW() 
+         WHERE id = $2`,
           [passwordHash, userId]
         );
 
-        // Mark token used
+        // --- Mark this token as used ---
         await client.query(
-          `UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`,
+          `UPDATE password_reset_tokens 
+         SET used_at = NOW() 
+         WHERE id = $1`,
           [resetToken.id]
         );
 
-        // --- Revoke all existing refresh tokens ---
+        // --- Invalidate ALL refresh tokens for this user ---
         await client.query(
-          `UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1`,
+          `UPDATE refresh_tokens 
+         SET revoked_at = NOW() 
+         WHERE user_id = $1 AND revoked_at IS NULL`,
           [userId]
         );
 
-        // --- Delete all existing sessions ---
-        await client.query(`DELETE FROM user_sessions WHERE user_id = $1`, [
-          userId,
-        ]);
-
-        // --- Create a new session for this device ---
-        await client.query(
-          `INSERT INTO user_sessions (user_id, ip_address, location, user_agent, expires_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-          [
-            userId,
-            ip,
-            location,
-            userAgent,
-            new Date(Date.now() + this.refreshTokenExpiryMs()),
-          ]
-        );
-
-        // Audit password reset success
+        // --- Log successful password reset ---
         await this.redisAuthService.audit({
           actor: email,
           action: "password-reset.success",
           ip,
           userAgent,
-          meta: { userId },
+          meta: { userId, location },
         });
 
-        return {
-          message:
-            "Password reset successfully. All other sessions have been revoked.",
-        };
+        return { message: "Password reset successful. Please log in again." };
       });
     } catch (err) {
       logger.error("resetPassword error:", err);
       if (err instanceof UnauthorizedException) throw err;
-      throw new InternalServerErrorException("Failed to reset password");
+
+      throw new InternalServerErrorException(
+        "Failed to reset password. Try again."
+      );
+    }
+  }
+
+  // LOGOUT SINGLE USER ON SINGLE DEVICE
+  async logout(req: Request, res: Response) {
+    const ip =
+      req.ip ||
+      (req.headers["x-real-ip"] as string) ||
+      (req.headers["x-forwarded-for"] as string);
+    const userAgent = req.headers["user-agent"];
+
+    const refreshToken = req.cookies?.refreshToken; //req.cookies.refreshToken
+    console.log("refesh token", refreshToken);
+    if (!refreshToken) {
+      throw new UnauthorizedException("You are not logged in");
+    }
+
+    let payload: JwtCustomPayload;
+    try {
+      payload = this.verifyAccessToken(refreshToken); // or verifyRefreshToken if you prefer DB verification
+    } catch (err) {
+      throw new UnauthorizedException("Invalid or expired token");
+    }
+
+    const userId = payload.sub;
+    const email = payload.sub; // or fetch email from DB if needed
+    const tokenHash = this.hashToken(refreshToken);
+
+    // Use transaction for atomicity
+    return await this.withTransaction(async (client) => {
+      try {
+        // Revoke refresh token and get its ID
+        const revokeRes = await client.query(
+          `UPDATE refresh_tokens
+         SET revoked_at = NOW()
+         WHERE user_id = $1 AND token_hash = $2 AND revoked_at IS NULL
+         RETURNING id`,
+          [userId, tokenHash]
+        );
+
+        if (revokeRes.rows.length === 0) {
+          throw new UnauthorizedException("Token already revoked or invalid");
+        }
+
+        const refreshTokenId = revokeRes.rows[0].id;
+
+        // Delete corresponding user session
+        await client.query(
+          `DELETE FROM user_sessions
+         WHERE user_id = $1 AND refresh_token_id = $2`,
+          [userId, refreshTokenId]
+        );
+
+        // Clear cookie
+        res.clearCookie("refreshToken", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/api/v1/admin/auth", // only sent to refresh endpoint  /api/v1/admin/auth/refresh
+        });
+
+        // Successful logout audit
+        await this.redisAuthService.audit({
+          actor: email,
+          action: "logout.success",
+          ip,
+          userAgent,
+        });
+
+        return { message: "Logout successful" };
+      } catch (err) {
+        throw err; // transaction rollback happens automatically
+      }
+    });
+  }
+
+  // LOGOUT SINGLE USER ON ALL DEVICES
+  async logoutAllDevices(userId: string, req: Request, res: Response) {
+    const ip =
+      req.ip ||
+      (req.headers["x-real-ip"] as string) ||
+      (req.headers["x-forwarded-for"] as string);
+    const userAgent = req.headers["user-agent"];
+
+    try {
+      return await this.withTransaction(async (client) => {
+        // Fetch email for audit
+        const result = await client.query(
+          `SELECT email FROM users WHERE id = $1`,
+          [userId]
+        );
+        if (result.rows.length === 0) {
+          throw new UnauthorizedException("User not found");
+        }
+        const email = result.rows[0].email;
+
+        // Revoke ALL refresh tokens and get their IDs
+        const revokeRes = await client.query(
+          `UPDATE refresh_tokens
+         SET revoked_at = NOW()
+         WHERE user_id = $1 AND revoked_at IS NULL
+         RETURNING id`,
+          [userId]
+        );
+
+        const revokedTokenIds = revokeRes.rows.map((row) => row.id);
+
+        if (revokedTokenIds.length > 0) {
+          // Delete all sessions associated with revoked tokens
+          await client.query(
+            `DELETE FROM user_sessions
+           WHERE user_id = $1 AND refresh_token_id = ANY($2::uuid[])`,
+            [userId, revokedTokenIds]
+          );
+        }
+
+        // Clear cookie for current device
+        res.clearCookie("refreshToken", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/api/v1/admin/auth", // only sent to refresh endpoint  /api/v1/admin/auth/refresh
+        });
+
+        // Audit logout for all devices
+        await this.redisAuthService.audit({
+          actor: email,
+          action: "logout.success",
+          ip,
+          userAgent,
+          meta: { allDevices: true },
+        });
+
+        return { message: "Successfully logged out from all devices" };
+      });
+    } catch (err) {
+      logger.error("logoutAllDevices error:", err);
+      if (err instanceof UnauthorizedException) throw err;
+      throw new InternalServerErrorException(
+        "Failed to log out from all devices"
+      );
     }
   }
 }

@@ -56,10 +56,6 @@ export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {
     const timestamp = payload.entry[0].changes[0].value.statuses[0].timestamp;
     const external_id = payload.entry[0].id;
 
-    logger.error(
-      `DATAAAAAAAAAAA ${message_id} ${recipient_id} ${message_from} ${error_info} ${message_status} ${timestamp} ${external_id}`
-    );
-
     try {
       await query(
         `

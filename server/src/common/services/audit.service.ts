@@ -14,13 +14,17 @@ export class RedisAuditService {
         ? process.env.REDIS_URL_DEV
         : process.env.REDIS_URL_PROD;
 
-    console.log(url);
-
     this.channel = process.env.AUDIT_LOG_CHANNEL || "audit:events";
     if (url) {
       this.redis = new Redis(url);
       //   logger.info("Connected to Redis server");
       this.redis.on("error", (e: any) => logger.error("Redis audit error", e));
+
+      // 🔎 Added ping check
+      this.redis
+        .ping()
+        .then((res) => logger.info(`Redis connected: ${res}`))
+        .catch((err) => logger.error("Redis connection failed", err));
     } else {
       this.redis = null;
       logger.warn("No REDIS_URL configured — using local audit logs only");

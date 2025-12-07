@@ -261,6 +261,7 @@ async function bootstrap() {
       ),
     });
 
+    // Connection Limiter
     if (process.env.LOAD_TESTING_MODE !== "true") {
       app.use((req: Request, res: Response, next: NextFunction) =>
         connectionLimiter.use(req, res, next)
@@ -283,6 +284,7 @@ async function bootstrap() {
       .filter(Boolean);
 
     if (process.env.LOAD_TESTING_MODE === "true") {
+      let None = null;
     } else {
       app.use(
         rateLimit({

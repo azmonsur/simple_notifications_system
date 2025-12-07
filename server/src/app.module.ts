@@ -1,5 +1,5 @@
 import { Module, MiddlewareConsumer, NestModule } from "@nestjs/common";
-import { ThrottlerModule } from "@nestjs/throttler";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { PrometheusModule } from "@willsoto/nestjs-prometheus";
 
@@ -21,7 +21,7 @@ import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
     ThrottlerModule.forRoot([
       {
         ttl: 60, // time window in seconds
-        limit: 1000, // max requests per IP in that window
+        limit: 10, // max requests per IP in that window
       },
     ]),
 
@@ -41,7 +41,7 @@ import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
     // ✅ Apply LoggingThrottlerGuard globally
     {
       provide: APP_GUARD,
-      useClass: LoggingThrottlerGuard,
+      useClass: ThrottlerGuard,
     },
   ],
 })

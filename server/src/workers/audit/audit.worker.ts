@@ -12,7 +12,12 @@ export class AuditLogService implements OnModuleInit {
   private readonly logger = new Logger(AuditLogService.name);
 
   constructor() {
-    this.redis = new Redis(process.env.REDIS_URL as string);
+    const url =
+      process.env.NODE_ENV === "development"
+        ? process.env.REDIS_URL_DEV
+        : process.env.REDIS_URL_PROD;
+
+    this.redis = new Redis(url as string);
     this.channel = process.env.AUDIT_LOG_CHANNEL || "audit:events";
   }
 

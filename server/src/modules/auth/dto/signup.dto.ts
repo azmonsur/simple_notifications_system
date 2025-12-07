@@ -3,9 +3,9 @@ import {
   IsEmail,
   IsNotEmpty,
   MinLength,
-  IsUUID,
   IsOptional,
   IsIn,
+  Matches,
 } from "class-validator";
 
 export class CreateSignupDto {
@@ -16,7 +16,11 @@ export class CreateSignupDto {
   username!: string;
 
   @IsNotEmpty({ message: "Password is required" })
-  @MinLength(6, { message: "Password must be at least 6 characters" })
+  // @MinLength(6, { message: "Password must be at least 6 characters" })
+  @Matches(/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{6,}$/, {
+    message:
+      "Password must be at least 6 characters long and include uppercase, lowercase, number, and special character",
+  })
   password!: string;
 
   @IsNotEmpty({ message: "First name is required" })

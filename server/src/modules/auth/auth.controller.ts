@@ -6,6 +6,7 @@ import {
   BadRequestException,
   Req,
   Res,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { AuthService, JwtCustomPayload } from "./auth.service";
@@ -13,7 +14,13 @@ import { CreateLoginDto } from "./dto/login.dto";
 import { CreateSignupDto } from "./dto/signup.dto";
 import { Throttle } from "@nestjs/throttler";
 
-@Throttle({ default: { limit: 10, ttl: 60 } })
+declare module "express" {
+  interface Request {
+    user?: JwtCustomPayload; // Add the payload type here
+  }
+}
+
+@Throttle({ default: { limit: 5, ttl: 60 } })
 @Controller("admin/auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -35,12 +42,20 @@ export class AuthController {
       req
     );
 
+    //  Remove old refresh token - new path
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/api/v1/admin/auth", // only sent to refresh endpoint
+    });
+
     // Set refresh token as HttpOnly cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      path: "/api/v1/admin/auth/refresh", // only sent to refresh endpoint
+      path: "/api/v1/admin/auth", // only sent to refresh endpoint
       maxAge: this.authService.refreshTokenExpiryMs(), // in milliseconds
     });
 
@@ -52,6 +67,7 @@ export class AuthController {
 
   // Login
   @Post("login")
+  @Throttle({ default: { limit: 5, ttl: 60 } })
   async login(
     @Body() body: CreateLoginDto,
     @Req() req: Request,
@@ -67,19 +83,72 @@ export class AuthController {
       req
     );
 
+    //  Remove old refresh token - new path
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/api/v1/admin/auth", // only sent to refresh endpoint
+    });
+
     // Set refresh token as HttpOnly cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      path: "/api/v1/admin/auth/refresh",
-      maxAge: this.authService.refreshTokenExpiryMs(),
+      path: "/api/v1/admin/auth", // only sent to refresh endpoint
+      maxAge: this.authService.refreshTokenExpiryMs(), // in milliseconds
     });
 
     return {
       message: "Login successful",
       accessToken,
     };
+  }
+
+  // Refresh token
+  @Post("refresh")
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const oldRefreshToken = req.cookies.refreshToken;
+
+    //  Remove old refresh token - new path
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/api/v1/admin/auth", // only sent to refresh endpoint
+    });
+
+    if (!oldRefreshToken)
+      throw new BadRequestException("Refresh token missing");
+
+    try {
+      const { sub, role } = await this.authService.verifyRefreshToken(
+        oldRefreshToken
+      );
+
+      const payload = { sub, role };
+
+      // Rotate refresh token
+      const { accessToken, refreshToken: newRefreshToken } =
+        await this.authService.rotateRefreshToken(oldRefreshToken, payload);
+
+      // Set new refresh token in cookie
+      res.cookie("refreshToken", newRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/api/v1/admin/auth",
+        maxAge: this.authService.refreshTokenExpiryMs(),
+      });
+
+      return { accessToken };
+    } catch (err) {
+      throw new BadRequestException("Invalid or revoked refresh token");
+    }
   }
 
   // Request reset token
@@ -102,39 +171,42 @@ export class AuthController {
     return this.authService.resetPassword(email, token, newPassword, req);
   }
 
-  // Refresh token
-  @Post("refresh")
-  async refresh(
+  // --- LOGOUT current device ---
+  @Post("logout")
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    try {
+      const result = await this.authService.logout(req, res);
+
+      return result;
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
+      throw err;
+    }
+  }
+
+  // --- LOGOUT from all devices ---
+  @Post("logout-all")
+  async logoutAllDevices(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response
   ) {
-    const oldRefreshToken = req.cookies.refreshToken;
-    if (!oldRefreshToken)
-      throw new BadRequestException("Refresh token missing");
-
     try {
-      const { sub, role } = await this.authService.verifyRefreshToken(
-        oldRefreshToken
+      // Extract userId from your auth context or JWT payload
+      const payload = req.user as { sub: string }; // assuming you use a guard that attaches user
+      if (!payload?.sub) {
+        throw new UnauthorizedException("User not authenticated");
+      }
+
+      const result = await this.authService.logoutAllDevices(
+        payload.sub,
+        req,
+        res
       );
 
-      const payload = { sub, role };
-
-      // Rotate refresh token
-      const { accessToken, refreshToken: newRefreshToken } =
-        await this.authService.rotateRefreshToken(oldRefreshToken, payload);
-
-      // Set new refresh token in cookie
-      res.cookie("refreshToken", newRefreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        path: "/api/v1/admin/auth/refresh",
-        maxAge: this.authService.refreshTokenExpiryMs(),
-      });
-
-      return { accessToken };
+      return result;
     } catch (err) {
-      throw new BadRequestException("Invalid or revoked refresh token");
+      if (err instanceof UnauthorizedException) throw err;
+      throw err;
     }
   }
 }
