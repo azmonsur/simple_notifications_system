@@ -10,10 +10,10 @@ import {
 
 import { QueryResult, PoolClient } from "pg";
 import { encryptDestination, decryptDestination } from "./utils/crypto";
-import { publishDelivery, publishRequeue } from "../../utils/rabbitmq";
+import { publishDelivery, publishRequeue } from "../../utils/rabbitmq/rabbitmq";
 import { CreateNotificationDto } from "./dto/notifications.dto";
-import { query as dbQuery, pool } from "../../utils/db";
-import { logger } from "../../utils/logger";
+import { query as dbQuery, pool } from "../../utils/db/db";
+import { logger } from "../../utils/logger/logger";
 
 // import amqp from "amqplib";
 const amqp = require("amqplib");

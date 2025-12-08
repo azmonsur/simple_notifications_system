@@ -1,4 +1,4 @@
-import { publishDelivery, closeConnection } from "../rabbitmq";
+import { publishDelivery, closeConnection } from "./rabbitmq";
 
 async function main() {
   try {

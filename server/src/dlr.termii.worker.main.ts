@@ -1,6 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import { TermiiDlrWorkerModule } from "./workers/dlr/termii/termii.worker.module";
-import { logger } from "./utils/logger";
+import { logger } from "./utils/logger/logger";
 import * as dotenv from "dotenv";
 
 dotenv.config();

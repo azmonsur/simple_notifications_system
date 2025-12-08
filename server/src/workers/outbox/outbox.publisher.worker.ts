@@ -1,13 +1,13 @@
 // src/workers/outbox/outbox.worker.service.ts
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { pool } from "../../utils/db";
+import { pool } from "../../utils/db/db";
 import type { PoolClient } from "pg";
 import {
   publishBatchToQueue,
   publishDeliveryToBucket,
   CHANNEL_QUEUES,
-} from "../../utils/rabbitmq";
-import { logger } from "../../utils/logger";
+} from "../../utils/rabbitmq/rabbitmq";
+import { logger } from "../../utils/logger/logger";
 
 const BATCH_SIZE = 100; // Number of messages per batch
 const POLL_INTERVAL_MS = 3000; // 2 seconds

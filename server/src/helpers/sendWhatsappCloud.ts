@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import convertToInternational from "./convertToInternational";
-import { logger } from "../utils/logger";
+import { logger } from "../utils/logger/logger";
 
 interface SendWhatsAppOptions {
   to: string;

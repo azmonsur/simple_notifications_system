@@ -1,6 +1,6 @@
 // helpers/sendEmailSendGrid.ts
 import sgMail from "@sendgrid/mail";
-import { logger } from "../utils/logger";
+import { logger } from "../utils/logger/logger";
 
 interface SendEmailOptions {
   subject: string;

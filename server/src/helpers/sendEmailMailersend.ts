@@ -1,5 +1,5 @@
 import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
-import { logger } from "../utils/logger";
+import { logger } from "../utils/logger/logger";
 
 interface SendEmailOptions {
   subject: string;

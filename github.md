@@ -48,6 +48,7 @@ gh repo create NIPOST-SNS --public --source=. --remote=origin --push
 # replace URL with your repo URL
 git remote add origin github.com:USERNAME/NIPOST-SNS.git
 git branch -M main
+*********************************************git remote set-url origin https://<USERNAME>:<PAT>@github.com/username/repo.git*********************************
 git push -u origin main
 ```
 

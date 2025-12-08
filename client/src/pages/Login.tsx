@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import api from "../utils/api";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../utils/auth";
+import axios from "axios";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -16,7 +16,11 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await api.post("/auth/login", { email, password });
+      const res = await axios.post(
+        "http://localhost:3001/api/v1/admin/auth/login",
+        { email, password },
+        { withCredentials: true }
+      );
       const { accessToken } = res.data;
 
       if (accessToken) {
@@ -26,8 +30,8 @@ export default function Login() {
       } else {
         alert("Login failed: access token not returned");
       }
-    } catch (err) {
-      alert("Login failed");
+    } catch (err: any) {
+      alert(err.response.data.message.message);
       console.error(err);
     } finally {
       setLoading(false);

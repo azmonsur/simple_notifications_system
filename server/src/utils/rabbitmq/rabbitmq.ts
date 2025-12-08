@@ -1,7 +1,7 @@
 // src/utils/rabbitmq.ts
 import * as amqp from "amqplib";
 import type { Connection, Channel } from "amqplib";
-import { logger } from "./logger";
+import { logger } from "../logger/logger";
 
 import * as dotenv from "dotenv";
 dotenv.config();

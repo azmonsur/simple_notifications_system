@@ -8,9 +8,9 @@ import {
   publishBatchToQueue,
   publishDelivery,
   CHANNEL_QUEUES,
-} from "../../utils/rabbitmq";
-import { pool } from "../../utils/db";
-import { logger } from "../../utils/logger";
+} from "../../utils/rabbitmq/rabbitmq";
+import { pool } from "../../utils/db/db";
+import { logger } from "../../utils/logger/logger";
 
 import * as dotenv from "dotenv";
 dotenv.config();

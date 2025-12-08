@@ -1,6 +1,6 @@
 import axios from "axios";
 import convertToInternational from "./convertToInternational";
-import { logger } from "../utils/logger";
+import { logger } from "../utils/logger/logger";
 
 interface TermiiResponse {
   success: boolean; // ✅ added for clarity

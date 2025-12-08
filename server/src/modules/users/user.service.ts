@@ -4,7 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from "@nestjs/common";
-import { query as dbQuery } from "../../utils/db";
+import { query as dbQuery } from "../../utils/db/db";
 
 @Injectable()
 export class UserService {

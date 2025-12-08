@@ -3,7 +3,7 @@ import {
   NestMiddleware,
   UnauthorizedException,
 } from "@nestjs/common";
-import { logger } from "../utils/logger";
+import { logger } from "../utils/logger/logger";
 import { Request, Response, NextFunction } from "express";
 
 @Injectable()

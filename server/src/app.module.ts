@@ -7,6 +7,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { UserModule } from "./modules/users/user.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { RedisModule } from "./redis/redis.module";
 import { WebhookModule } from "./modules/webhook/webhook.module";
 import { HealthModule } from "./modules/health/health.module";
 import { CommonModule } from "./common/common.module";
@@ -36,6 +37,7 @@ import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
     UserModule,
     CommonModule,
     HealthModule,
+    RedisModule,
   ],
   providers: [
     // ✅ Apply LoggingThrottlerGuard globally

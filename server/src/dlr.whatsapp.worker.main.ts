@@ -1,6 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import { WhatsAppDlrWorkerModule } from "./workers/dlr/whatsapp_meta/whatsapp.worker.module";
-import { logger } from "./utils/logger";
+import { logger } from "./utils/logger/logger";
 import * as dotenv from "dotenv";
 
 dotenv.config();

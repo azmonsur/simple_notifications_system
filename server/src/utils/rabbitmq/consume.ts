@@ -1,4 +1,4 @@
-import { getChannel } from "../rabbitmq";
+import { getChannel } from "./rabbitmq";
 
 async function consume() {
   const channel = await getChannel();

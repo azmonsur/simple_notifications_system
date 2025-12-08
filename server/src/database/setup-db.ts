@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { query, retryQuery } from "../utils/db";
-import { logger } from "../utils/logger";
+import { query, retryQuery } from "../utils/db/db";
+import { logger } from "../utils/logger/logger";
 import * as dotenv from "dotenv";
 
 dotenv.config();

@@ -1,5 +1,5 @@
 import { ServerClient, Message } from "postmark";
-import { logger } from "../utils/logger";
+import { logger } from "../utils/logger/logger";
 
 interface SendEmailOptions {
   subject: string;

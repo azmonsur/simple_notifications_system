@@ -1,7 +1,7 @@
 // src/outbox.worker.main.ts
 import { NestFactory } from "@nestjs/core";
 import { OutboxWorkerModule } from "./workers/outbox/outbox.publisher.worker.module";
-import { logger } from "./utils/logger";
+import { logger } from "./utils/logger/logger";
 import * as dotenv from "dotenv";
 
 dotenv.config();

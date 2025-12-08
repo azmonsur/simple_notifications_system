@@ -1,10 +1,13 @@
 // src/workers/sms/sms.worker.service.ts
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
-import { query as dbQuery } from "../../../utils/db";
+import {
+  getChannel,
+  publishDeliveryToBucket,
+} from "../../../utils/rabbitmq/rabbitmq";
+import { query as dbQuery } from "../../../utils/db/db";
 import SendSMSTermii from "../../../helpers/sendSMSTermii";
 import Bottleneck from "bottleneck";
-import { logger } from "../../../utils/logger";
+import { logger } from "../../../utils/logger/logger";
 import { decryptDestination } from "../../../modules/notifications/utils/crypto";
 
 // --- Interfaces ---

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useAuth } from "../utils/auth";
+import { useAuth, triggerLogout } from "../utils/auth";
+import api from "../utils/api";
 import {
   FiHome,
   FiMessageSquare,
@@ -49,24 +50,17 @@ export default function Sidebar({ darkMode, setDarkMode }: SidebarProps) {
 
   const { accessToken, logout } = auth;
 
-  // useEffect(() => {
-  //   if (!accessToken) return;
+  const handleLogout = async () => {
+    try {
+      await api.post("/auth/logout"); // call backend logout
+    } catch (err) {
+      console.error("Logout API failed", err);
+    } finally {
+      triggerLogout(); // clears local accessToken and navigates to /login
+    }
 
-  //   const payload = JSON.parse(atob(accessToken.split(".")[1]));
-  //   const expiry = payload.exp * 1000;
-  //   const timeout = expiry - Date.now();
-
-  //   if (timeout <= 0) {
-  //     logout();
-  //     return;
-  //   }
-
-  //   const timer = setTimeout(() => {
-  //     logout();
-  //   }, timeout);
-
-  //   return () => clearTimeout(timer);
-  // }, [accessToken]);
+    // logout()
+  };
 
   return (
     <>
@@ -160,10 +154,7 @@ export default function Sidebar({ darkMode, setDarkMode }: SidebarProps) {
         {auth.accessToken && (
           <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
-              onClick={() => {
-                logout();
-                navigate("/login");
-              }}
+              onClick={handleLogout}
               className="flex items-center gap-2 text-red-500 hover:text-red-600 transition-all"
             >
               <FiLogOut />

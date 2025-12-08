@@ -9,8 +9,8 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 // import { WhatsAppDLRDto } from "./whatsapp.dto";
-import { publishDLR } from "../../../utils/rabbitmq";
-import { logger } from "../../../utils/logger";
+import { publishDLR } from "../../../utils/rabbitmq/rabbitmq";
+import { logger } from "../../../utils/logger/logger";
 import { WhatsAppWebhookDto } from "./whatsapp.dto";
 
 @Controller("webhook/whatsapp")

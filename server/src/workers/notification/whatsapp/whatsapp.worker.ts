@@ -1,8 +1,11 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
-import { logger } from "../../../utils/logger";
+import {
+  getChannel,
+  publishDeliveryToBucket,
+} from "../../../utils/rabbitmq/rabbitmq";
+import { logger } from "../../../utils/logger/logger";
 import SendWhatsAppCloud from "../../../helpers/sendWhatsappCloud";
-import { query as dbQuery } from "../../../utils/db";
+import { query as dbQuery } from "../../../utils/db/db";
 import { decryptDestination } from "../../../modules/notifications/utils/crypto";
 
 // --- Interfaces ---

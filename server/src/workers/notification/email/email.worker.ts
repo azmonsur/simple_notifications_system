@@ -1,10 +1,13 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
-import { logger } from "../../../utils/logger";
+import {
+  getChannel,
+  publishDeliveryToBucket,
+} from "../../../utils/rabbitmq/rabbitmq";
+import { logger } from "../../../utils/logger/logger";
 import SendEmailSendGrid from "../../../helpers/sendEmailSendgrid";
 import { toTitleCase } from "../../../helpers/convertToTitleCase";
 import Bottleneck from "bottleneck";
-import { query as dbQuery } from "../../../utils/db";
+import { query as dbQuery } from "../../../utils/db/db";
 import { generateReceiptPDF } from "../../../helpers/generateReceiptPDF";
 import { decryptDestination } from "../../../modules/notifications/utils/crypto";
 

@@ -1,7 +1,10 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel, publishDeliveryToBucket } from "../../../utils/rabbitmq";
-import { query } from "../../../utils/db";
-import { logger } from "../../../utils/logger";
+import {
+  getChannel,
+  publishDeliveryToBucket,
+} from "../../../utils/rabbitmq/rabbitmq";
+import { query } from "../../../utils/db/db";
+import { logger } from "../../../utils/logger/logger";
 
 @Injectable()
 export class WhatsAppDlrWorkerService implements OnModuleInit, OnModuleDestroy {

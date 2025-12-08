@@ -1,6 +1,6 @@
 import { Controller, Post, Body, HttpCode, Logger } from "@nestjs/common";
 import { SendGridEventDto } from "./sendgrid.dto";
-import { publishDLR } from "../../../utils/rabbitmq";
+import { publishDLR } from "../../../utils/rabbitmq/rabbitmq";
 
 @Controller("webhook/sendgrid")
 export class SendGridWebhookController {

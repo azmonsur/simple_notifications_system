@@ -16,7 +16,7 @@ import os from "os";
 // setup();
 
 import { AppModule } from "./app.module";
-import { logger } from "./utils/logger";
+import { logger } from "./utils/logger/logger";
 import { MetricsMiddleware } from "./middleware/metrics.middleware";
 import { ConnectionLimiterMiddleware } from "./middleware/connection-limiter.middleware";
 

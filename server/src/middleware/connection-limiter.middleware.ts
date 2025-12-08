@@ -1,7 +1,7 @@
 // middleware/connection-limiter.middleware.ts
 import { Injectable, NestMiddleware } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
-import { logger } from "../utils/logger";
+import { logger } from "../utils/logger/logger";
 
 interface ConnectionLimiterConfig {
   maxConnectionsPerIp?: number;

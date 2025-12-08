@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { query } from "../../utils/db";
+import { query } from "../../utils/db/db";
 
 @Injectable()
 export class DlrAnalyticsService {

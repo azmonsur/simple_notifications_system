@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
 import Redis from "ioredis";
-import { query } from "../../utils/db"; // adjust path if needed
+import { query } from "../../utils/db/db"; // adjust path if needed
 import * as dotenv from "dotenv";
 
 dotenv.config();

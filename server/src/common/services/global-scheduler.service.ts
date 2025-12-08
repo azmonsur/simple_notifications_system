@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import * as cron from "node-cron";
-import { retryQuery } from "../../utils/db";
+import { retryQuery } from "../../utils/db/db";
 import Redis from "ioredis";
 
 // 1. Define the custom Redis instance type to include the new command

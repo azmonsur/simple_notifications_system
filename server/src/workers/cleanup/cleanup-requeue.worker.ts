@@ -1,7 +1,7 @@
 // src/workers/cleanup/cleanup-requeue.service.ts
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
-import { getChannel } from "../../utils/rabbitmq";
-import { logger } from "../../utils/logger";
+import { getChannel } from "../../utils/rabbitmq/rabbitmq";
+import { logger } from "../../utils/logger/logger";
 
 interface ConsumeMessage {
   content: Buffer;

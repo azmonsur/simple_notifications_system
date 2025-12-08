@@ -1,6 +1,8 @@
 // src/utils/auth.ts
 import { createContext, useContext, useState, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "./api";
+// import { logoutUser } from "./api";
 
 interface AuthContextType {
   accessToken: string | null;
@@ -31,7 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAccessToken(token);
   };
 
-  const logout = () => {
+  const logout = async () => {
     localStorage.removeItem("accessToken");
     setAccessToken(null);
     navigate("/login");
