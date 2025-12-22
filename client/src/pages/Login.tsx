@@ -32,7 +32,13 @@ export default function Login() {
         alert("Login failed: access token not returned");
       }
     } catch (err: any) {
-      alert(JSON.stringify(err.response.data.message.message));
+      const msg =
+        err.response?.data?.message?.message || // dev nested
+        err.response?.data?.message || // prod simple
+        err.message || // network or other error
+        "An unknown error occurred";
+
+      alert(msg);
     } finally {
       setLoading(false);
     }
