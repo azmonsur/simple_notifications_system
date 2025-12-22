@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import LiveMetricsDashboard from "./pages/Metrics";
 import Protected from "./utils/Protected";
+import Signup from "./pages/Signup";
 
 export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(
@@ -70,6 +71,14 @@ export default function App() {
             element={
               <Protected>
                 <LiveMetricsDashboard darkMode={darkMode} />
+              </Protected>
+            }
+          />
+          <Route
+            path="/signup"
+            element={
+              <Protected>
+                <Signup darkMode={darkMode} />
               </Protected>
             }
           />

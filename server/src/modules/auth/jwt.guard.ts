@@ -39,7 +39,6 @@ export class JwtAuthGuard implements CanActivate {
     const authHeader =
       req.headers["authorization"] || req.headers["Authorization"];
 
-    console.log("authHeader", authHeader);
     if (!authHeader)
       throw new UnauthorizedException("Authorization header missing");
 

@@ -16,9 +16,9 @@ export class CreateSignupDto {
 
   // USERNAME
   @IsNotEmpty({ message: "Username is required" })
-  @Matches(/^[A-Za-z0-9_]{6,}$/, {
+  @Matches(/^[A-Za-z0-9_]{4,}$/, {
     message:
-      "Username must be at least 6 characters long and only include uppercase, lowercase, number, underscore",
+      "Username must be at least 4 characters long and only include uppercase, lowercase, number, underscore",
   })
   // @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   username!: string;

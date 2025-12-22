@@ -148,6 +148,9 @@ export default function Sidebar({ darkMode, setDarkMode }: SidebarProps) {
           <NavItem to="/metrics" icon={<FiBarChart2 />}>
             Metrics
           </NavItem>
+          <NavItem to="/signup" icon={<FiBarChart2 />}>
+            Signup
+          </NavItem>
         </nav>
 
         {/* Footer */}
