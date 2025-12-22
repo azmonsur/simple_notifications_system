@@ -100,8 +100,10 @@ export class CleanupWorkerService implements OnModuleInit, OnModuleDestroy {
             const content = JSON.parse(dlqMsg.content.toString());
 
             if (content.notif_id === notif_id) {
+              console.log("content.notif_id ", content.notif_id);
               this.channel!.ack(dlqMsg);
               removed = true;
+
               logger.info(`🧹 Removed message from DLQ (${notif_id})`);
             } else {
               this.channel!.nack(dlqMsg, false, true);
@@ -128,7 +130,9 @@ export class CleanupWorkerService implements OnModuleInit, OnModuleDestroy {
       }, 3000);
 
       if (!removed) {
-        logger.warn(`⚠️ No message found in DLQ for notif_id ${notif_id}`);
+        logger.warn(
+          `⚠️ No message found in DLQ for notif_id ${notif_id} and DLQ ${dlqName}`
+        );
       }
 
       this.safeAck(msg);

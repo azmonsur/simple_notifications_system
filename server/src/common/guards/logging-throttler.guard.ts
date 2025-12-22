@@ -5,7 +5,7 @@ import {
   ThrottlerRequest,
 } from "@nestjs/throttler";
 import { Reflector } from "@nestjs/core";
-import { throttledRequestsTotal } from "../metrics/api.metrics";
+import { throttledRequestsTotal } from "../../modules/metrics/api.metrics";
 
 @Injectable()
 export class LoggingThrottlerGuard extends ThrottlerGuard {

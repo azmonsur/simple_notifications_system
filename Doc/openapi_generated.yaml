@@ -1,0 +1,503 @@
+openapi: 3.0.3
+info:
+  title: Generated API
+  version: 1.0.0
+servers:
+- url: /api/v1
+paths:
+  /api/v1/admin/analytics/notifications/summary:
+    get:
+      summary: Summary of notifications
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/analytics/notifications/sent-this-month:
+    get:
+      summary: Notifications sent this month
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/analytics/notifications/channel-status:
+    get:
+      summary: Channel status
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/analytics/notifications/channel-status-dash:
+    get:
+      summary: Channel status dash
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/analytics/notifications/average:
+    get:
+      summary: Average notifications per parcel
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/analytics/notifications/parcel-status:
+    get:
+      summary: Parcel status
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/analytics/notifications/dlr-stats:
+    get:
+      summary: DLR stats
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/analytics/parcels/total:
+    get:
+      summary: Total parcels
+      responses:
+        '200':
+          description: Successful response
+  /api/v1/admin/auth/signup:
+    post:
+      summary: Signup new user
+      responses:
+        '201':
+          description: User created
+        '400':
+          description: Bad request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupDto'
+  /api/v1/admin/auth/login:
+    post:
+      summary: Login user
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+        '401':
+          description: Unauthorized
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+  /api/v1/admin/auth/logout:
+    post:
+      summary: Logout user
+      responses:
+        '200':
+          description: Successful response
+  /api/v1/admin/auth/logout-all:
+    post:
+      summary: Logout all sessions
+      responses:
+        '200':
+          description: Successful response
+  /api/v1/admin/dlr/analysis/summary:
+    get:
+      summary: DLR summary
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/dlr/analysis/total:
+    get:
+      summary: DLR total
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/dlr/analysis/channel:
+    get:
+      summary: DLR channel
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/dlr/analysis/channel-status:
+    get:
+      summary: DLR channel status
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/dlr/analysis/provider-status:
+    get:
+      summary: Provider status
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/dlr/analysis/provider-status-percentage:
+    get:
+      summary: Provider status percentage
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/dlr/analysis/success-rate:
+    get:
+      summary: Success rate
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/admin/dlr/analysis/daily-trend:
+    get:
+      summary: Daily trend
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+  /api/v1/admin/notifications/failed:
+    get:
+      summary: Failed notifications
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+  /api/v1/notification:
+    get:
+      summary: Single notification?
+      responses:
+        '200':
+          description: Successful response
+  /api/v1/admin/notifications/:id/retry:
+    patch:
+      summary: Retry notification
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/admin/notifications/:id/resolve:
+    patch:
+      summary: Resolve notification
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/users:
+    get:
+      summary: Get users
+      responses:
+        '200':
+          description: Successful response
+  /api/v1/webhook/sendgrid/event:
+    post:
+      summary: Receive SendGrid events
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendGridEventDto'
+  /api/v1/webhook/termii/dlr:
+    post:
+      summary: Receive Termii DLR
+      responses:
+        '200':
+          description: Successful response
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: to
+        in: query
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TermiiDLRDto'
+  /api/v1/webhook/whatsapp/status:
+    get:
+      summary: WhatsApp webhook verify / status
+      responses:
+        '200':
+          description: Successful response
+    post:
+      summary: WhatsApp webhook events
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsAppWebhookDto'
+components:
+  schemas:
+    SignupDto:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        roleName:
+          type: string
+        gender:
+          type: string
+          enum:
+          - male
+          - female
+          - other
+      required:
+      - email
+      - password
+      - firstName
+      - lastName
+      - roleName
+    LoginDto:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+      - email
+      - password
+    SendGridEventDto:
+      type: object
+      properties:
+        email:
+          type: string
+        event:
+          type: string
+        ip:
+          type: string
+        response:
+          type: string
+        sg_message_id:
+          type: string
+        smtp-id:
+          type: string
+        timestamp:
+          type: number
+    TermiiDLRDto:
+      type: object
+      properties:
+        type:
+          type: string
+        receiver:
+          type: string
+        sender:
+          type: string
+        message:
+          type: string
+        messageId:
+          type: string
+        status:
+          type: string
+    WhatsAppStatusDto:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        timestamp:
+          type: string
+    WhatsAppWebhookDto:
+      type: object
+      description: WhatsApp webhook payload (entry array etc.)
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -10,6 +10,7 @@ import {
   IsNumber,
   Min,
   IsBoolean,
+  Matches,
 } from "class-validator";
 import { Type } from "class-transformer";
 
@@ -48,6 +49,9 @@ export class RecipientDto {
 export class NotificationEventDto {
   @IsString()
   @IsNotEmpty()
+  @Matches(/[a-zA-Z0-9-]{4,}/, {
+    message: "Tracking number must be alphanumeric",
+  })
   tracking_number!: string;
 
   @IsString()

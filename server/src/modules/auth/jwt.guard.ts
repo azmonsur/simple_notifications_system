@@ -9,6 +9,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { AuthService, JwtCustomPayload } from "./auth.service";
 import { Request } from "express";
+import { IS_PUBLIC_KEY } from "../../common/decorators/public.decorator";
 
 export interface AuthRequest extends Request {
   user?: JwtCustomPayload;
@@ -16,16 +17,29 @@ export interface AuthRequest extends Request {
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+  private static readonly EXCLUDED = ["/metrics", "/health"];
   constructor(
     private readonly authService: AuthService,
     private readonly reflector: Reflector
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) return true;
+
     const req: AuthRequest = context.switchToHttp().getRequest();
+    const path = req.url.split("?")[0];
+
+    if (JwtAuthGuard.EXCLUDED.includes(path)) return true;
 
     const authHeader =
       req.headers["authorization"] || req.headers["Authorization"];
+
+    console.log("authHeader", authHeader);
     if (!authHeader)
       throw new UnauthorizedException("Authorization header missing");
 

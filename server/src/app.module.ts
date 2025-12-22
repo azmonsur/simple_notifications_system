@@ -13,8 +13,9 @@ import { HealthModule } from "./modules/health/health.module";
 import { CommonModule } from "./common/common.module";
 import { DlrAnalyticsModule } from "./modules/dlr_analytics/dlr.analytics.module";
 import { AdminModule } from "./admin/admin.module";
-import { LoggingThrottlerGuard } from "./guards/logging-throttler.guard";
 import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
+import { RedisRateLimitGuard } from "./common/guards/redis/redis-rate-limit.guard";
+import { JwtAuthGuard } from "./modules/auth/jwt.guard";
 
 @Module({
   imports: [
@@ -43,7 +44,11 @@ import { ApiKeyMiddleware } from "./middleware/api-key.middleware";
     // ✅ Apply LoggingThrottlerGuard globally
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RedisRateLimitGuard,
     },
   ],
 })

@@ -4,6 +4,9 @@ import {
   UnauthorizedException,
   ConflictException,
   InternalServerErrorException,
+  HttpException,
+  HttpStatus,
+  ForbiddenException,
 } from "@nestjs/common";
 import jwt, { JwtPayload, Secret } from "jsonwebtoken";
 import * as bcrypt from "bcrypt";
@@ -18,6 +21,7 @@ import crypto from "crypto";
 import SendEmailSendGrid from "../../helpers/sendEmailSendgrid";
 import geoip from "geoip-lite";
 import { Request, Response } from "express";
+import { AccountLockedException } from "../../common/exceptions/error.exception";
 
 export interface JwtCustomPayload extends JwtPayload {
   sub: string; // will hold user id (UUID)
@@ -99,7 +103,9 @@ export class AuthService {
             [email]
           );
 
-          if (res.rows.length === 0) {
+          const user = res?.rows[0];
+
+          if (!user) {
             await this.redisAuthService.audit({
               actor: email,
               action: "login.failed",
@@ -110,9 +116,7 @@ export class AuthService {
             throw new UnauthorizedException("Invalid credentials");
           }
 
-          const user = res.rows[0];
-
-          // Verify password using bcrypt
+          // Verify password using argon2
           // const passwordMatches = await bcrypt.compare(
           //   password,
           //   user.password_hash
@@ -124,7 +128,7 @@ export class AuthService {
           if (!passwordMatches) {
             // audit failed attempt
             await this.redisAuthService.audit({
-              actor: email,
+              actor: user.id,
               action: "login.failed",
               ip,
               userAgent: req.headers["user-agent"],
@@ -152,7 +156,7 @@ export class AuthService {
 
           if (user.failed_login_count > 3) {
             await this.redisAuthService.audit({
-              actor: email,
+              actor: user.id,
               action: "login.failed",
               ip,
               userAgent: req.headers["user-agent"],
@@ -170,12 +174,14 @@ export class AuthService {
               );
             }
 
-            throw new UnauthorizedException("Login not allowed this time");
+            throw new AccountLockedException(
+              "Login not allowed this time, try again soon"
+            );
           }
 
           // Successful login audit
           await this.redisAuthService.audit({
-            actor: email,
+            actor: user.id,
             action: "login.success",
             ip,
             userAgent: req.headers["user-agent"],
@@ -225,16 +231,22 @@ export class AuthService {
           return { accessToken, refreshToken };
         } catch (err) {
           // If it's a known Nest exception, rethrow so outer catch handles translation
-          if (err instanceof UnauthorizedException) throw err;
-          // Any other error during transaction should be rethrown to cause rollback
-          logger.error("validateAdmin transaction error:", err);
-          throw err;
+
+          if (err instanceof HttpException) {
+            throw err;
+          }
+          const errMsg = err instanceof Error ? err.message : String(err);
+          logger.error(`validateAdmin transaction error: ${errMsg}`);
+          throw new InternalServerErrorException("Login failed");
         }
       });
     } catch (err) {
       // Top-level translation and logging
-      logger.error("validateAdmin error:", err);
-      if (err instanceof UnauthorizedException) throw err;
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error(`validateAdmin transaction error: ${errMsg}`);
       throw new InternalServerErrorException("Login failed");
     }
   }
@@ -271,7 +283,7 @@ export class AuthService {
             "SELECT id FROM users WHERE email = $1 OR username = $2",
             [email, username]
           );
-          if (existsRes.rows.length > 0) {
+          if (existsRes?.rows?.length > 0) {
             throw new ConflictException("Email or username already registered");
           }
 
@@ -289,7 +301,7 @@ export class AuthService {
             "SELECT id, name FROM roles WHERE name = $1",
             [roleName]
           );
-          if (roleRes.rows.length === 0) {
+          if (roleRes?.rows?.length === 0) {
             throw new ConflictException(`Role '${roleName}' not found`);
           }
           const roleId = roleRes.rows[0].id;
@@ -346,7 +358,7 @@ export class AuthService {
 
           // Audit signup
           await this.redisAuthService.audit({
-            actor: email,
+            actor: user.id,
             action: "signup.success",
             meta: { userId: user.id },
           });
@@ -380,7 +392,6 @@ export class AuthService {
   }
 
   // --- Verify access token ---
-
   verifyAccessToken(token: string): JwtCustomPayload {
     try {
       const payload = jwt.verify(token, this.jwtSecret);
@@ -750,7 +761,7 @@ export class AuthService {
 
         // --- Log successful password reset ---
         await this.redisAuthService.audit({
-          actor: email,
+          actor: userId,
           action: "password-reset.success",
           ip,
           userAgent,
@@ -778,7 +789,7 @@ export class AuthService {
     const userAgent = req.headers["user-agent"];
 
     const refreshToken = req.cookies?.refreshToken; //req.cookies.refreshToken
-    console.log("refesh token", refreshToken);
+
     if (!refreshToken) {
       throw new UnauthorizedException("You are not logged in");
     }
@@ -791,7 +802,7 @@ export class AuthService {
     }
 
     const userId = payload.sub;
-    const email = payload.sub; // or fetch email from DB if needed
+
     const tokenHash = this.hashToken(refreshToken);
 
     // Use transaction for atomicity
@@ -829,7 +840,7 @@ export class AuthService {
 
         // Successful logout audit
         await this.redisAuthService.audit({
-          actor: email,
+          actor: userId,
           action: "logout.success",
           ip,
           userAgent,

@@ -137,3 +137,31 @@ _______________WHATSAPP_________________
 };
 
 
+rateLimit({
+          windowMs: rateLimitWindowMs,
+          max: (req) => {
+            const clientIp = getClientIp(req);
+
+            // Unlimited for whitelisted IPs
+            if (
+              whitelistedIps.length > 0 &&
+              whitelistedIps.includes(clientIp)
+            ) {
+              return 10000; // 0 means no limit
+            }
+
+            return rateLimitMax;
+          },
+          message: {
+            error: "Too many requests from this IP, please try again later",
+            retryAfter: Math.ceil(rateLimitWindowMs / 1000 / 60) + " minutes",
+          },
+          standardHeaders: true, // Send `RateLimit-*` headers
+          legacyHeaders: false, // Disable `X-RateLimit-*` headers
+          // Skip rate limiting for health checks
+          skip: (req) => req.path === "/health" || req.path === "/metrics",
+          // ✅ CRITICAL: Use the real client IP
+          keyGenerator: (req) => {
+            return getClientIp(req);
+          },
+        })

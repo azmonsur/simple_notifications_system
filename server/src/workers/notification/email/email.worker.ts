@@ -193,7 +193,7 @@ export class EmailWorkerService implements OnModuleInit, OnModuleDestroy {
           center: job.post_office_center as string,
           source: job.post_office_center,
           sender_name: job.recipient.name as string,
-          sender_email: job.recipient.destination,
+          sender_email: decryptDestination(job.recipient.destination),
           service_type: "Parcel Shipment",
           amount_paid: job.template_vars.amount || 0,
           payment_method: "Cash",

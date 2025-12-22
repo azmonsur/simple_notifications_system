@@ -1,5 +1,5 @@
 import { ValidationPipe } from "@nestjs/common";
-import { NestFactory } from "@nestjs/core";
+import { NestFactory, Reflector } from "@nestjs/core";
 import helmet from "helmet";
 import { json } from "body-parser";
 import { Request, Response, NextFunction } from "express";
@@ -21,6 +21,7 @@ import { MetricsMiddleware } from "./middleware/metrics.middleware";
 import { ConnectionLimiterMiddleware } from "./middleware/connection-limiter.middleware";
 
 import * as dotenv from "dotenv";
+import { RedisRateLimitGuard } from "./common/guards/redis/redis-rate-limit.guard";
 dotenv.config();
 
 // ✅ Add this helper function to extract real client IP
@@ -283,40 +284,8 @@ async function bootstrap() {
       .map((ip) => ip.trim())
       .filter(Boolean);
 
-    if (process.env.LOAD_TESTING_MODE === "true") {
-      let None = null;
-    } else {
-      app.use(
-        rateLimit({
-          windowMs: rateLimitWindowMs,
-          max: (req) => {
-            const clientIp = getClientIp(req);
-
-            // Unlimited for whitelisted IPs
-            if (
-              whitelistedIps.length > 0 &&
-              whitelistedIps.includes(clientIp)
-            ) {
-              return 10000; // 0 means no limit
-            }
-
-            return rateLimitMax;
-          },
-          message: {
-            error: "Too many requests from this IP, please try again later",
-            retryAfter: Math.ceil(rateLimitWindowMs / 1000 / 60) + " minutes",
-          },
-          standardHeaders: true, // Send `RateLimit-*` headers
-          legacyHeaders: false, // Disable `X-RateLimit-*` headers
-          // Skip rate limiting for health checks
-          skip: (req) => req.path === "/health" || req.path === "/metrics",
-          // ✅ CRITICAL: Use the real client IP
-          keyGenerator: (req) => {
-            return getClientIp(req);
-          },
-        })
-      );
-    }
+    // Rate limiting
+    // SET WITH REDIS_RATE_LIMIT_GUARD CHECK APP MODLUE AND CONTROLLERS
 
     // Body parser with size limits
     app.use(
@@ -418,7 +387,7 @@ async function bootstrap() {
       })
     );
 
-    // ✅ Global prefix for API routes (RESTORED)
+    // ✅ Global prefix for API routes
     app.setGlobalPrefix("api/v1", {
       exclude: ["/health", "/metrics"], // Exclude monitoring endpoints
     });

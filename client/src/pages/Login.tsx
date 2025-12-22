@@ -32,7 +32,6 @@ export default function Login() {
       }
     } catch (err: any) {
       alert(err.response.data.message.message);
-      console.error(err);
     } finally {
       setLoading(false);
     }

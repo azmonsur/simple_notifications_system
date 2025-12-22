@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
+import { Injectable, OnModuleInit, Logger, Inject } from "@nestjs/common";
 import Redis from "ioredis";
 import { query } from "../../utils/db/db"; // adjust path if needed
 import * as dotenv from "dotenv";
@@ -7,17 +7,10 @@ dotenv.config();
 
 @Injectable()
 export class AuditLogService implements OnModuleInit {
-  private readonly redis: Redis;
   private readonly channel: string;
   private readonly logger = new Logger(AuditLogService.name);
 
-  constructor() {
-    const url =
-      process.env.NODE_ENV === "development"
-        ? process.env.REDIS_URL_DEV
-        : process.env.REDIS_URL_PROD;
-
-    this.redis = new Redis(url as string);
+  constructor(@Inject("REDIS_CLIENT") private readonly redis: Redis) {
     this.channel = process.env.AUDIT_LOG_CHANNEL || "audit:events";
   }
 

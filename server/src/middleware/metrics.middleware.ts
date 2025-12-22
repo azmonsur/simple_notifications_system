@@ -4,7 +4,7 @@ import {
   httpRequestsTotal,
   httpRequestDurationSeconds,
   httpErrorsTotal,
-} from "../metrics/api.metrics";
+} from "../modules/metrics/api.metrics";
 
 @Injectable()
 export class MetricsMiddleware implements NestMiddleware {

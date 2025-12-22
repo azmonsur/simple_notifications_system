@@ -7,12 +7,14 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  HttpCode,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { AuthService, JwtCustomPayload } from "./auth.service";
 import { CreateLoginDto } from "./dto/login.dto";
 import { CreateSignupDto } from "./dto/signup.dto";
-import { Throttle } from "@nestjs/throttler";
+import { RedisRateLimit } from "../../common/guards/redis/redis-rate-limit.decorator";
+import { Public } from "../../common/decorators/public.decorator";
 
 declare module "express" {
   interface Request {
@@ -20,12 +22,15 @@ declare module "express" {
   }
 }
 
-@Throttle({ default: { limit: 5, ttl: 60 } })
+@Public()
 @Controller("admin/auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   // SIGN UP
+
+  @RedisRateLimit(8, 60)
+  @HttpCode(201)
   @Post("signup")
   async signup(
     @Body() body: CreateSignupDto,
@@ -66,8 +71,10 @@ export class AuthController {
   }
 
   // Login
+
+  @RedisRateLimit(5, 60)
+  @HttpCode(200)
   @Post("login")
-  @Throttle({ default: { limit: 5, ttl: 60 } })
   async login(
     @Body() body: CreateLoginDto,
     @Req() req: Request,
@@ -107,6 +114,7 @@ export class AuthController {
   }
 
   // Refresh token
+  @RedisRateLimit(10, 60)
   @Post("refresh")
   async refresh(
     @Req() req: Request,
@@ -152,6 +160,9 @@ export class AuthController {
   }
 
   // Request reset token
+
+  @RedisRateLimit(5, 300)
+  @HttpCode(200)
   @Post("request-password-reset")
   async requestPasswordReset(
     @Body("email") email: string,
@@ -161,6 +172,8 @@ export class AuthController {
   }
 
   // Rest password
+  @RedisRateLimit(5, 3600)
+  @HttpCode(200)
   @Post("reset-password")
   async resetPassword(
     @Body("email") email: string,
@@ -172,6 +185,8 @@ export class AuthController {
   }
 
   // --- LOGOUT current device ---
+  @RedisRateLimit(20, 60)
+  @HttpCode(200)
   @Post("logout")
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     try {
@@ -186,6 +201,7 @@ export class AuthController {
 
   // --- LOGOUT from all devices ---
   @Post("logout-all")
+  @HttpCode(200)
   async logoutAllDevices(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response

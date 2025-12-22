@@ -12,9 +12,13 @@ import {
 import { publishDLR } from "../../../utils/rabbitmq/rabbitmq";
 import { logger } from "../../../utils/logger/logger";
 import { WhatsAppWebhookDto } from "./whatsapp.dto";
+import { RedisRateLimit } from "../../../common/guards/redis/redis-rate-limit.decorator";
+import { Public } from "../../../common/decorators/public.decorator";
 
+@Public()
 @Controller("webhook/whatsapp")
 export class WhatsAppWebhookController {
+  @RedisRateLimit(30, 60)
   @Post("status")
   @HttpCode(200)
   async receiveStatus(@Body() data: WhatsAppWebhookDto) {
@@ -26,6 +30,7 @@ export class WhatsAppWebhookController {
   }
 
   // --- 2. GET Endpoint for Webhook Verification ---
+  @RedisRateLimit(30, 60)
   @Get("status")
   async verifyWebhook(
     @Query("hub.mode") mode: string,

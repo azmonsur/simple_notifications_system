@@ -1,7 +1,9 @@
 import { Controller, Get } from "@nestjs/common";
 import { InjectMetric } from "@willsoto/nestjs-prometheus";
 import { Counter } from "prom-client";
+import { Public } from "../../common/decorators/public.decorator";
 
+@Public()
 @Controller("metrics")
 export class MetricsController {
   constructor(
