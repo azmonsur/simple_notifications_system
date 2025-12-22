@@ -13,11 +13,12 @@ export default function Login() {
   const navigate = useNavigate();
 
   const submit = async (e: React.FormEvent) => {
+    const url = import.meta.env.VITE_LOGIN_ROUTE;
     e.preventDefault();
     setLoading(true);
     try {
       const res = await axios.post(
-        "http://localhost:3001/api/v1/admin/auth/login",
+        url,
         { email, password },
         { withCredentials: true }
       );
