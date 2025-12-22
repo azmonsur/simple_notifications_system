@@ -32,7 +32,7 @@ export default function Login() {
         alert("Login failed: access token not returned");
       }
     } catch (err: any) {
-      alert(err.response.data.message.message);
+      alert(JSON.stringify(err.response.data.message.message));
     } finally {
       setLoading(false);
     }
